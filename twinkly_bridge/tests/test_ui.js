@@ -15,12 +15,13 @@ const deferred = () => {let resolve; const promise = new Promise(r => {resolve=r
   const first=queue.change({mode:'chase'});
   queue.change({color:'#00ff00'});
   queue.change({brightness:45});
+  queue.change({punch:85});
   assert.equal(queue.accept({mode:'restore',revision:0},staleEpoch),false);
   assert.equal(queue.state.mode,'chase');
   assert.equal(calls.length,1);
   responses[0].resolve({revision:1});
   await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(calls[1],{color:'#00ff00',brightness:45});
+  assert.deepEqual(calls[1],{color:'#00ff00',brightness:45,punch:85});
   assert.equal(calls[1].mode,undefined,'changing color must not select restore');
   responses[1].resolve({revision:2});await first;
   assert.equal(queue.accept({mode:'restore',revision:1},queue.epoch),false);

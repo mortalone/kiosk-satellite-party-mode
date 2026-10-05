@@ -191,7 +191,7 @@ class SendspinSource:
         client = SendspinClient(identity, "Twinkly Bridge", self.roles, pairing_store=store,
             player_support=self.player_support if self.player_enabled else None,
             visualizer_support=self.support, session=session,
-            device_info=DeviceInfo(product_name="Twinkly Bridge", manufacturer="Kiosk companion", software_version="0.1.3"))
+            device_info=DeviceInfo(product_name="Twinkly Bridge", manufacturer="Kiosk companion", software_version="0.1.4"))
         disconnected = asyncio.Event()
         client.add_visualizer_listener(lambda frames: self.receive(frames, client))
         if self.player_enabled:
@@ -235,7 +235,7 @@ class SendspinSource:
         hello_payload = {"client_id": identity.peer_id,
             "name": "Twinkly Bridge", "version": 1, "supported_roles": [role.value for role in self.roles],
             "visualizer@v1_support": self.support.to_dict(),
-            "device_info": {"product_name": "Twinkly Bridge", "software_version": "0.1.3"}}
+            "device_info": {"product_name": "Twinkly Bridge", "software_version": "0.1.4"}}
         state_payload = {"available": True, "state": "synchronized"}
         if self.player_enabled:
             hello_payload["player@v1_support"] = self.player_support.to_dict()

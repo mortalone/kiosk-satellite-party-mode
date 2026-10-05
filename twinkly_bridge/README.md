@@ -8,12 +8,14 @@ a silent PCM player and a visualizer role by default, allowing a universal group
 to treat it as an audio destination. Received audio is counted and discarded;
 there is no audio output, microphone or local FFT analyzer. Set `sendspin_player`
 to false to restore visualizer-only mode.
-Six LED patterns are inspired by Party Mode's visualizations.
+Six LED patterns are inspired by Party Mode's visualizations. A live Calm ↔ Disco
+slider adjusts response speed and music-driven pulse contrast independently of
+the brightness limit.
 
 Individual LED chase output was confirmed on the user's Flex with 0.1.0.
 Direct Sendspin visualization was confirmed with 0.1.1 through the browser and Pi
-players. The new silent-player behavior in 0.1.3 passes reference-server tests but
-still needs verification with the physical Pi/Sonos universal group.
+players. The user confirmed 0.1.3 works with the mixed Pi/Sonos group.
+The new light dynamics in 0.1.4 still need judging on the physical Flex.
 
 Dependencies are pinned and installed when the container is built, never in
 Home Assistant or Pyscript. No Home Assistant configuration directories, host

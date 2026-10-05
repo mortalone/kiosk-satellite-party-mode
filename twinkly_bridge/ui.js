@@ -12,7 +12,7 @@ async function readApiResponse(response) {
 class ControlQueue {
   constructor(send, onState, onError) {
     this.send = send; this.onState = onState; this.onError = onError;
-    this.state = {mode:'restore', color:'#ff4080', brightness:30, speed:1, pattern:'mirror', gain:1};
+    this.state = {mode:'restore', color:'#ff4080', brightness:30, speed:1, pattern:'mirror', gain:1, punch:50};
     this.pending = null; this.sending = false; this.epoch = 0; this.revision = -1;
   }
   accept(status, epoch) {
@@ -58,10 +58,11 @@ if (typeof document !== 'undefined') {
   const controls = new ControlQueue(patch => request('api/control', patch), state => {
     document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('selected', b.dataset.mode === state.mode));
     document.querySelectorAll('[data-pattern]').forEach(b => b.classList.toggle('selected', b.dataset.pattern === state.pattern));
-    for (const id of ['color','brightness','speed','gain']) $(id).value = state[id];
+    for (const id of ['color','brightness','speed','gain','punch']) $(id).value = state[id];
     $('brightnessValue').textContent = state.brightness+'%';
     $('speedValue').textContent = state.speed+'×';
     $('gainValue').textContent = state.gain+'×';
+    $('punchValue').textContent = state.punch+'%';
   }, error => { $('error').textContent = error.message; });
   let refreshing = false;
   async function refresh() {
@@ -87,9 +88,18 @@ if (typeof document !== 'undefined') {
   }
   document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => controls.change({mode:b.dataset.mode})));
   document.querySelectorAll('[data-pattern]').forEach(b => b.addEventListener('click', () => controls.change({mode:'music', pattern:b.dataset.pattern})));
-  for (const id of ['color','brightness','speed','gain']) {
-    $(id).addEventListener('change', () => controls.change({[id]:id === 'color'?$(id).value:Number($(id).value)}));
-    if (id !== 'color') $(id).addEventListener('input', () => { $(id+'Value').textContent = $(id).value+(id === 'brightness'?'%':'×'); });
+  let punchTimer = null;
+  for (const id of ['color','brightness','speed','gain','punch']) {
+    $(id).addEventListener('change', () => {
+      if (id === 'punch') { clearTimeout(punchTimer); punchTimer = null; }
+      controls.change({[id]:id === 'color'?$(id).value:Number($(id).value)});
+    });
+    if (id !== 'color') $(id).addEventListener('input', () => {
+      $(id+'Value').textContent = $(id).value+(['brightness','punch'].includes(id)?'%':'×');
+      if (id === 'punch' && punchTimer === null) punchTimer = setTimeout(() => {
+        punchTimer = null; controls.change({punch:Number($('punch').value)});
+      }, 100);
+    });
   }
   refresh(); setInterval(refresh, 2000);
 }

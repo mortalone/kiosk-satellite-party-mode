@@ -1,3 +1,14 @@
+# 0.1.4
+
+- Add a live Calm ↔ Disco music slider in ingress, independent of the brightness limit and selected pattern.
+- Calm uses slower attack/release; Disco uses faster responses and stronger brightness pulses driven by bass/energy rises and server peak events, without a synthetic beat clock or local FFT.
+- Apply pulse contrast to all music patterns; Radial Pulse blends from sustained energy to pronounced onset pulses.
+- Use soft sensitivity gain to preserve differences between strong spectrum bands instead of clipping them to the same maximum.
+- Limit slider traffic and avoid reasserting Twinkly realtime mode on every adjustment; periodic mode recovery remains active.
+- Use elapsed-time smoothing so 20/30 FPS have equivalent response times; missing visualizer data clears the pulse.
+- Add `music_punch` (0–100, default 50) for the startup setting. Ingress adjustments apply immediately; configure the startup value to retain it across restarts.
+- The user confirmed 0.1.3 works with the mixed group; the new light dynamics still require judging on the physical Flex.
+
 # 0.1.3
 
 - Register as both a silent audio player and visualizer by default so Music Assistant can select a playback output protocol.

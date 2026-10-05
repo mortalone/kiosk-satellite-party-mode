@@ -25,7 +25,7 @@ def validate_control(data):
         if data["pattern"] not in PATTERNS:
             raise ValueError("Unknown music pattern")
         result["pattern"] = data["pattern"]
-    for key, low, high in (("brightness", 0, 100), ("speed", 0.1, 5), ("gain", 0.5, 3)):
+    for key, low, high in (("brightness", 0, 100), ("speed", 0.1, 5), ("gain", 0.5, 3), ("punch", 0, 100)):
         if key in data:
             value = float(data[key])
             if not math.isfinite(value) or not low <= value <= high:
@@ -51,7 +51,41 @@ def validate_bands(data):
     return result
 
 
-def frame_colors(mode, count, phase, color, bands, pattern="spectrum", loudness=0, peak=0):
+class MusicDynamics:
+    """Frame-rate independent smoothing and onset pulse, without a beat clock."""
+    def __init__(self):
+        self.bands = []
+        self.previous = None
+        self.pulse = 0.0
+
+    def process(self, bands, loudness, peak, gain, punch, dt):
+        if not bands:
+            self.__init__()
+            return [], 0.0, 0.0, 1.0
+        amount = punch / 100
+        dt = max(0.001, min(0.25, dt))
+        # Sendspin levels are log-scaled: measure relative amplitude changes
+        # before gain so raising sensitivity cannot flatten the pulse detector.
+        bass = sum(bands[:max(1, len(bands)//4)]) / max(1, len(bands)//4)
+        energy = max(loudness, sum(bands)/len(bands), bass)
+        signal = 10 ** (3 * (energy - 1)) if energy > 0 else 0.0
+        onset = 0.0 if self.previous is None else min(1.0, max(0.0, (signal-self.previous)/max(0.015, self.previous))*2)
+        self.previous = signal if self.previous is None else self.previous + (signal-self.previous)*(1-math.exp(-dt/0.2))
+        self.pulse = max(self.pulse * math.exp(-dt/(0.4-0.28*amount)), onset, min(1.0, peak))
+        if len(self.bands) != len(bands):
+            self.bands = [0.0]*len(bands)
+        # Soft gain retains differences instead of clipping every strong band.
+        boost = lambda value: 1-(1-max(0.0,min(1.0,value)))**gain
+        for i, value in enumerate(bands):
+            target = boost(value)
+            tau = (0.12-0.095*amount) if target > self.bands[i] else (0.75-0.65*amount)
+            self.bands[i] += (target-self.bands[i])*(1-math.exp(-dt/tau))
+        modulation = (1-amount) + amount*(0.1+0.9*self.pulse)
+        return list(self.bands), boost(loudness), self.pulse, modulation
+
+
+def frame_colors(mode, count, phase, color, bands, pattern="spectrum", loudness=0, peak=0,
+                 punch=0, pulse=0, modulation=1):
     energy = max(loudness, sum(bands) / len(bands) if bands else 0)
     bass = sum(bands[:max(1, len(bands)//4)]) / max(1, len(bands)//4) if bands else 0
     def pixel(i):
@@ -65,7 +99,7 @@ def frame_colors(mode, count, phase, color, bands, pattern="spectrum", loudness=
             position = abs(2 * i - (count - 1)) / max(1, count - 1) if pattern == "mirror" else fraction
             level = bands[min(len(bands)-1, int(position * len(bands)))] if bands else 0
             if pattern == "pulse":
-                level = max(bass, energy)
+                level = max(bass, energy)*(1-punch/100) + pulse*(punch/100)
             elif pattern == "wave":
                 level = energy * (0.25 + 0.75 * (0.5 + 0.5 * math.sin(fraction * 12 - phase * 20)))
             elif pattern == "particles":
@@ -74,6 +108,8 @@ def frame_colors(mode, count, phase, color, bands, pattern="spectrum", loudness=
             elif pattern == "tunnel":
                 distance = abs(fraction * 2 - 1)
                 level = energy * max(0, 1 - ((distance - phase * 2) % 1) * 6)
+            if pattern != "pulse":
+                level *= modulation
             if pattern in {"pulse", "wave", "particles", "tunnel"}:
                 return tuple(round(c * min(1, max(0, level))) for c in color)
             rgb = colorsys.hsv_to_rgb(0.72 - 0.72 * position, 1, min(1, max(0, level)))
@@ -147,7 +183,8 @@ class Bridge:
         self.fps = max(5, min(30, int(options.get("fps", 20))))
         self.settings = {"mode": "restore", "brightness": int(options.get("brightness", 30)),
                          "speed": float(options.get("speed", 1)), "color": (255, 64, 128),
-                         "pattern": options.get("music_pattern", "mirror"), "gain": 1.0}
+                         "pattern": options.get("music_pattern", "mirror"), "gain": 1.0,
+                         "punch": validate_control({"punch": options.get("music_punch", 50)})["punch"]}
         self.factory = factory
         self.lock = threading.Lock()
         self.wake = threading.Event()
@@ -191,6 +228,7 @@ class Bridge:
                     "brightness": self.settings["brightness"], "fps": self.fps,
                     "speed": self.settings["speed"],
                     "pattern": self.settings["pattern"], "gain": self.settings["gain"],
+                    "punch": self.settings["punch"],
                     "color": "#" + "".join(f"{c:02x}" for c in self.settings["color"]),
                     "revision": self.revision,
                     "audio_fresh": time.monotonic() - self.bands_at < 1.5}
@@ -203,12 +241,14 @@ class Bridge:
         last_brightness = None
         next_retry = 0
         next_rt_check = 0
-        smooth = []
+        dynamics = MusicDynamics()
+        last_frame = time.monotonic()
         try:
             while not self.stopping.is_set():
                 self.wake.clear()
                 with self.lock:
                     settings, revision = dict(self.settings), self.revision
+                    applied_mode = self.info["applied_mode"]
                     bands = list(self.bands) if time.monotonic() - self.bands_at < 1.5 else []
                     loudness, peak = (self.loudness, self.peak) if bands else (0, 0)
                     self.peak *= 0.85
@@ -241,20 +281,22 @@ class Bridge:
                         if last_brightness != settings["brightness"]:
                             device.set_brightness(settings["brightness"])
                             last_brightness = settings["brightness"]
-                        if hasattr(device, "ensure_rt") and (time.monotonic() >= next_rt_check or revision != applied_revision):
-                            recovered = device.ensure_rt(force=revision != applied_revision)
+                        if hasattr(device, "ensure_rt") and (time.monotonic() >= next_rt_check or mode != applied_mode):
+                            recovered = device.ensure_rt(force=mode != applied_mode)
                             if recovered:
                                 with self.lock:
                                     self.info["recoveries"] += 1
                             next_rt_check = time.monotonic() + 2
-                        phase = time.monotonic() * settings["speed"] / 6
-                        if len(smooth) != len(bands):
-                            smooth = [0.0] * len(bands)
-                        for i, value in enumerate(bands):
-                            target = min(1, value * settings["gain"])
-                            smooth[i] += (target - smooth[i]) * (0.7 if target > smooth[i] else 0.18)
+                        now = time.monotonic()
+                        dt, last_frame = now-last_frame, now
+                        phase = now * settings["speed"] * (1+0.7*settings["punch"]/100 if mode == "music" else 1) / 6
+                        if mode != "music":
+                            dynamics = MusicDynamics()
+                        smooth, level, pulse, modulation = dynamics.process(bands, loudness, peak,
+                            settings["gain"], settings["punch"], dt)
                         colors = frame_colors(mode, device.num_leds, phase, settings["color"], smooth,
-                                              settings["pattern"], min(1, loudness * settings["gain"]), peak)
+                                              settings["pattern"], level, peak,
+                                              settings["punch"], pulse, modulation)
                         device.show_rt_frame([device.make_pixel(*rgb) for rgb in colors])
                     applied_revision = revision
                     with self.lock:

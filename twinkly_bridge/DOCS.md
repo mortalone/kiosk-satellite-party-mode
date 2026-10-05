@@ -22,6 +22,7 @@ Home Assistant OS/Supervised with the add-on store is required.
 | `sendspin_protocol` | auto | Detect classic servers or use the official encrypted Noise client; force `legacy`/`noise` if needed |
 | `sendspin_player` | true | Register as a silent PCM audio receiver plus visualizer for group compatibility; false restores visualizer-only mode |
 | `light_delay_ms` | 0 | Light timing adjustment: positive means later, negative means earlier; −2000 to 2000 ms |
+| `music_punch` | 50 | Initial Calm ↔ Disco setting, 0–100; independent of maximum brightness |
 | `music_pattern` | mirror | Initial music style: spectrum, mirror, pulse, wave, particles, tunnel |
 
 Changing configuration requires restarting the add-on. It starts without changing the light.
@@ -114,6 +115,21 @@ is still missing. Disable `sendspin_player` to return to the previous visualizer
 behavior. The Kiosk does not process or forward the light data. Playing independently in the Sonos app is not automatically
 captured by this connection.
 
+## Calm ↔ Disco
+
+The ingress **Roligt ↔ Disco** slider applies immediately to every music pattern.
+At 0, transitions are softer and spectrum bands fade slowly. At 100, the response
+is faster, with a dimmer background and stronger pulses from bass/energy rises
+and Sendspin peak events. Radial Pulse becomes the most obvious full-strip pulse;
+Mirror/Spectrum keep their frequency layout but gain stronger brightness contrast.
+Wave/Particles/Tunnel also gain movement speed. This is onset detection, not BPM
+tracking or a predefined beat loop. Held tones do not fabricate repeated beats.
+
+Brightness remains the maximum device setting. Sensitivity uses a soft gain curve
+that preserves differences between strong bands. Speed still controls moving
+patterns. The slider does not change the selected pattern, mode or brightness.
+`music_punch` sets the initial value after restart; ingress changes are session settings.
+
 ## Music patterns
 
 | Pattern | Party Mode inspiration | LED behavior |
@@ -153,7 +169,8 @@ with 0.1.1 through both a browser player and the Pi Sendspin player. Membership
 retention under a universal group was unresolved in 0.1.1/0.1.2. Version 0.1.3
 adds the silent player role for a hardware compatibility test. Registration, PCM
 reception and simultaneous visualization pass against the official Sendspin
-reference server, but mixed Pi/Sonos universal-group behavior is not yet verified.
+reference server, and the user confirmed it works in the mixed group. The new 0.1.4 light dynamics
+still require judging on the physical Flex.
 Connection errors appear in the UI and log, with retries every five seconds.
 Verify the IP and local network access first. Authentication, firmware or LED protocol
 differences may require adaptation after the first hardware test. No firmware update

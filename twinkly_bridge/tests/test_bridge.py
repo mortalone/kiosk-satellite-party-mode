@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from bridge import Bridge, frame_colors, handler_for, open_device, validate_bands, validate_control
+from bridge import Bridge, MusicDynamics, frame_colors, handler_for, open_device, validate_bands, validate_control
 
 
 def eventually(predicate, timeout=2):
@@ -51,7 +51,7 @@ class BehaviorTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 validate_bands({"bands": bands})
         self.assertEqual(validate_bands({"bands": [-1, 0.3, 2]}), [0, 0.3, 1])
-        for control in ({"mode": "firmware"}, {"speed": float("inf")}, {"brightness": 101}, {"color": "red"}):
+        for control in ({"mode": "firmware"}, {"speed": float("inf")}, {"brightness": 101}, {"color": "red"}, {"punch":-1}, {"punch":101}, {"punch":float("nan")}):
             with self.assertRaises(ValueError):
                 validate_control(control)
 
@@ -121,6 +121,39 @@ class BehaviorTest(unittest.TestCase):
                 self.assertTrue(all(pixel == (0, 0, 0) for pixel in frame_colors("music", 12, 0.2, (255, 255, 255), [], pattern)))
         mirror = frame_colors("music", 100, 0.2, (0, 255, 0), [0.2, 0.5, 1], "mirror")
         self.assertEqual(mirror, list(reversed(mirror)))
+
+    def test_disco_pulse_contrast_decay_and_missing_data(self):
+        dynamics = MusicDynamics()
+        for _ in range(40):
+            bands, level, pulse, modulation = dynamics.process([0.45]*32,0.45,0,1,100,0.05)
+        quiet = frame_colors('music',12,0,(255,255,255),bands,'pulse',level,0,100,pulse,modulation)[0][0]
+        bands, level, pulse, modulation = dynamics.process([0.75]*32,0.75,0.9,1,100,0.05)
+        hit = frame_colors('music',12,0,(255,255,255),bands,'pulse',level,0,100,pulse,modulation)[0][0]
+        self.assertGreater(hit-quiet,200)
+        for _ in range(20):
+            _, _, pulse, _ = dynamics.process([0.45]*32,0.45,0,1,100,0.05)
+        self.assertLess(pulse,0.01)
+        self.assertEqual(dynamics.process([],0,0,1,100,0.05),([],0,0,1))
+
+    def test_smoothing_is_frame_rate_independent_and_gain_retains_contrast(self):
+        results=[]
+        for fps in (20,30):
+            dynamics=MusicDynamics()
+            for _ in range(fps):
+                result=dynamics.process([0.55,0.75],0.6,0,3,0,1/fps)
+            results.append(result[0])
+        for left,right in zip(*results):
+            self.assertAlmostEqual(left,right,places=6)
+        self.assertLess(results[0][0],results[0][1])
+        self.assertLess(results[0][1],1)
+        calm=MusicDynamics(); disco=MusicDynamics()
+        self.assertGreater(disco.process([1],1,0,1,100,0.05)[0][0],calm.process([1],1,0,1,0,0.05)[0][0])
+
+    def test_punch_patch_keeps_pattern_mode_and_brightness(self):
+        bridge=Bridge({'music_punch':20})
+        bridge.control({'mode':'music','pattern':'mirror','brightness':30})
+        result=bridge.control({'punch':85})
+        self.assertEqual((result['mode'],result['pattern'],result['brightness'],result['punch']),('music','mirror',30,85))
 
     def test_real_library_uses_timeout_during_authentication(self):
         from requests.adapters import HTTPAdapter
