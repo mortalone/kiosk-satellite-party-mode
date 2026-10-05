@@ -25,18 +25,22 @@ final class PartyQueueModel {
     }
 
     static int offset(JSONObject queue) {
-        return Math.max(0, queue.optInt("current_index", 0) - 2);
+        return offset(queue, 2);
     }
 
-    static PartyQueueModel parse(JSONObject queue, JSONArray items, String base) {
+    static int offset(JSONObject queue, int before) { return Math.max(0, queue.optInt("current_index", 0) - bounded(before)); }
+    static int limit(JSONObject queue, int before, int after) { return Math.max(1, queue.optInt("current_index", 0) - offset(queue, before) + bounded(after) + 1); }
+    static int bounded(int count) { return Math.max(0, Math.min(10, count)); }
+    static PartyQueueModel parse(JSONObject queue, JSONArray items, String base) { return parse(queue, items, base, 2, 2); }
+    static PartyQueueModel parse(JSONObject queue, JSONArray items, String base, int before, int after) {
         List<Track> tracks = new ArrayList<>();
         JSONObject current = queue.optJSONObject("current_item");
         String currentId = text(current, "queue_item_id");
         int currentIndex = queue.optInt("current_index", 0);
-        int start = offset(queue);
+        int start = offset(queue, before);
         boolean found = false;
-        if (items != null) for (int i = 0; i < items.length() && i < 5; i++) {
-            if (start + i > currentIndex + 2) break;
+        if (items != null) for (int i = 0; i < items.length() && i < limit(queue, before, after); i++) {
+            if (start + i > currentIndex + bounded(after)) break;
             JSONObject item = items.optJSONObject(i);
             if (item == null) continue;
             boolean selected = !currentId.isEmpty()
@@ -49,7 +53,7 @@ final class PartyQueueModel {
             tracks.clear();
             if (current != null) tracks.add(track(current, base, true));
             JSONObject next = queue.optJSONObject("next_item");
-            if (next != null) tracks.add(track(next, base, false));
+            if (next != null && bounded(after) > 0) tracks.add(track(next, base, false));
         }
         JSONObject media = current == null ? null : current.optJSONObject("media_item");
         double duration = current == null ? 0 : current.optDouble("duration", 0);
@@ -58,7 +62,7 @@ final class PartyQueueModel {
                 Math.max(0, duration), text(queue, "state"));
     }
 
-    private static Track track(JSONObject item, String base, boolean current) {
+    static Track track(JSONObject item, String base, boolean current) {
         JSONObject media = item.optJSONObject("media_item");
         String title = text(media, "name");
         if (title.isEmpty()) title = text(item, "name");

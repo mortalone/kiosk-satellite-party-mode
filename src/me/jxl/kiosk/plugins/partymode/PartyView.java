@@ -14,6 +14,10 @@ import android.os.SystemClock;
 import android.text.TextPaint;
 import android.text.TextUtils;
 import android.view.View;
+import android.view.MotionEvent;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
 import java.util.Collections;
 import java.util.Map;
 
@@ -35,7 +39,48 @@ final class PartyView extends View {
     private Bitmap guestQr;
     private String guestText = "", guestStatus = "";
     private final PartyEffects effects = new PartyEffects();
-    private final Runnable redraw = this::invalidate;
+    private boolean framePending;
+    private long lastDraw;
+    private Bitmap queueLayer;
+    private boolean layerDirty = true;
+    private final RectF progressRect = new RectF();
+    private final List<RectF> hitRects = new ArrayList<>();
+    private final List<String> hitIds = new ArrayList<>();
+    private Consumer<String> trackAction;
+    private float scrollOffset, maxScroll, touchY, lastTouchY;
+    private boolean scrolling;
+    private String currentId = "";
+    private final Runnable redraw = () -> { framePending = false; invalidate(); };
+    private void requestFrame() {
+        if (framePending) return;
+        framePending = true;
+        long delay = Math.max(0, effects.frameDelay() - (SystemClock.elapsedRealtime() - lastDraw));
+        postDelayed(redraw, delay);
+    }
+    void setTrackAction(Consumer<String> action) { trackAction = action; layerDirty = true; requestFrame(); }
+    @Override public boolean onTouchEvent(MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                touchY = lastTouchY = event.getY(); scrolling = false; return true;
+            case MotionEvent.ACTION_MOVE:
+                if (Math.abs(event.getY() - touchY) > 8 * getResources().getDisplayMetrics().density) scrolling = true;
+                if (scrolling && maxScroll > 0) {
+                    scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset + lastTouchY - event.getY()));
+                    layerDirty = true; requestFrame();
+                }
+                lastTouchY = event.getY(); return true;
+            case MotionEvent.ACTION_UP:
+                if (!scrolling && trackAction != null) for (int i = 0; i < hitRects.size(); i++)
+                    if (hitRects.get(i).contains(event.getX(), event.getY())) { performClick(); trackAction.accept(hitIds.get(i)); break; }
+                return true;
+            case MotionEvent.ACTION_CANCEL: return true;
+        }
+        return super.onTouchEvent(event);
+    }
+    @Override public boolean performClick() { super.performClick(); return true; }
+    @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        layerDirty = true; queueLayer = null; super.onSizeChanged(w, h, oldw, oldh);
+    }
 
     PartyView(Context context, boolean fullscreen) {
         super(context); this.fullscreen = fullscreen;
@@ -44,6 +89,9 @@ final class PartyView extends View {
 
     void setQueue(PartyQueueModel model, Map<String, Bitmap> artwork, boolean playing) {
         if (this.model != model || this.playing != playing) anchor = SystemClock.elapsedRealtime();
+        if (this.model != model || !this.artwork.equals(artwork)) layerDirty = true;
+        String selected = ""; for (PartyQueueModel.Track track : model.tracks) if (track.current) selected = track.id;
+        if (!selected.equals(currentId)) { currentId = selected; scrollOffset = -1; }
         this.model = model; this.artwork = artwork; this.playing = playing;
         String key = "";
         for (PartyQueueModel.Track track : model.tracks) if (track.current) key = track.artwork;
@@ -55,27 +103,28 @@ final class PartyView extends View {
             background = null; backgroundKey = "";
         }
         if (model.tracks.isEmpty()) message = "Afspilningskøen er tom";
-        invalidate();
+        requestFrame();
     }
 
-    void setMessage(String value) { message = value; invalidate(); }
+    void setMessage(String value) { if (!value.equals(message)) { message = value; layerDirty = true; requestFrame(); } }
 
     void setPresentation(String effect, boolean queueVisible) {
-        this.effect = PartySignal.effect(effect); this.queueVisible = queueVisible;
-        removeCallbacks(redraw); invalidate();
+        String next = PartySignal.effect(effect);
+        if (!next.equals(this.effect) || this.queueVisible != queueVisible) layerDirty = true;
+        this.effect = next; this.queueVisible = queueVisible; requestFrame();
     }
     void setGuests(Bitmap qr, String caption, String status) {
-        guestQr = qr; guestText = caption; guestStatus = status; invalidate();
+        if (guestQr != qr || !guestText.equals(caption)) { guestQr = qr; guestText = caption; layerDirty = true; requestFrame(); }
     }
     void acceptAudio(float[] bands, float[] wave, int fps, boolean demo) {
-        effects.accept(bands, wave, fps, demo); invalidate();
+        effects.accept(bands, wave, fps, demo); if (playing) requestFrame();
     }
     @Override protected void onDetachedFromWindow() {
-        removeCallbacks(redraw); super.onDetachedFromWindow();
+        removeCallbacks(redraw); framePending = false; queueLayer = null; super.onDetachedFromWindow();
     }
 
     @Override protected void onDraw(Canvas canvas) {
-        super.onDraw(canvas);
+        super.onDraw(canvas); lastDraw = SystemClock.elapsedRealtime();
         float density = getResources().getDisplayMetrics().density;
         float sp = getResources().getDisplayMetrics().scaledDensity;
         if (fullscreen) {
@@ -88,13 +137,32 @@ final class PartyView extends View {
             }
             if (!"off".equals(effect)) {
                 effects.draw(canvas, getWidth(), getHeight(), effect, playing);
-                removeCallbacks(redraw);
-                postDelayed(redraw, effects.frameDelay());
+
                 String status = effects.status();
                 if (!status.isEmpty()) line(canvas, status, 14 * density, getHeight() - 14 * density,
                         getWidth() - 82 * density, 12 * sp, false, 0xDDFFFFFF);
             }
         }
+        if (getWidth() > 0 && getHeight() > 0 && (queueLayer == null || layerDirty)) {
+            if (queueLayer == null) queueLayer = Bitmap.createBitmap(getWidth(), getHeight(), Bitmap.Config.ARGB_8888);
+            queueLayer.eraseColor(Color.TRANSPARENT); progressRect.setEmpty(); hitRects.clear(); hitIds.clear();
+            drawQueue(new Canvas(queueLayer)); layerDirty = false;
+        }
+        paint.setAlpha(255);
+        if (queueLayer != null) canvas.drawBitmap(queueLayer, 0, 0, paint);
+        if (!progressRect.isEmpty() && model.duration > 0) {
+            double elapsed = model.elapsed + (playing ? Math.max(0, SystemClock.elapsedRealtime() - anchor) / 1000.0 : 0);
+            float progress = (float) Math.max(0, Math.min(1, elapsed / model.duration));
+            paint.setColor(0x4400B9F5); canvas.drawRect(progressRect, paint);
+            paint.setColor(0xFF00B9F5); canvas.drawRect(progressRect.left, progressRect.top,
+                    progressRect.left + progressRect.width() * progress, progressRect.bottom, paint);
+        }
+        if (playing && !"off".equals(effect)) requestFrame();
+        else if (playing && !framePending) { framePending = true; postDelayed(redraw, 1000); }
+    }
+    private void drawQueue(Canvas canvas) {
+        float density = getResources().getDisplayMetrics().density;
+        float sp = getResources().getDisplayMetrics().scaledDensity;
         float areaLeft = 0, areaTop = 0, areaWidth = getWidth(), areaHeight = getHeight();
         if (fullscreen && guestQr != null) {
             boolean landscape = getWidth() >= getHeight();
@@ -114,9 +182,6 @@ final class PartyView extends View {
                 areaTop = y + side + 44 * density;
                 areaHeight = getHeight() - areaTop;
             }
-        } else if (fullscreen && !guestStatus.isEmpty()) {
-            line(canvas, guestStatus, 14 * density, 32 * density, getWidth() - 90 * density,
-                    13 * sp, false, 0xDDFFFFFF);
         }
         if (model.tracks.isEmpty()) {
             line(canvas, message, areaLeft + 20 * density, areaTop + areaHeight / 2f, areaWidth - 40 * density,
@@ -131,17 +196,19 @@ final class PartyView extends View {
         }
         float margin = (fullscreen ? 32 : 4) * density;
         float width = areaWidth - margin * 2;
-        float neighbor = (fullscreen ? 66 : 30) * density;
-        float current = (fullscreen ? queueVisible ? 148 : 88 : 76) * density;
+        float neighbor = (fullscreen ? 56 : 30) * density;
+        float current = (fullscreen ? queueVisible ? 112 : 88 : 76) * density;
         float gap = 4 * density;
         float desired = current + neighbor * (tracks.size() - 1) + gap * (tracks.size() - 1);
-        float maxHeight = Math.max(1, areaHeight - (fullscreen ? 72 : 8) * density);
-        float scale = Math.min(1, maxHeight / Math.max(1, desired));
-        neighbor *= scale; current *= scale; gap *= scale;
-        float total = desired * scale;
-        float y = fullscreen && !queueVisible ? areaTop + areaHeight - total - 64 * density : areaTop + (areaHeight - total) / 2;
+        float maxHeight = Math.max(1, areaHeight - (fullscreen ? 32 : 8) * density);
+        float total = desired;
+        maxScroll = Math.max(0, total - maxHeight);
         int currentIndex = 0;
         for (int i = 0; i < tracks.size(); i++) if (tracks.get(i).current) currentIndex = i;
+        if (scrollOffset < 0) scrollOffset = Math.max(0, Math.min(maxScroll, currentIndex * (neighbor + gap) - (maxHeight - current) / 2));
+        scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset));
+        float y = areaTop + (maxScroll > 0 ? 16 * density - scrollOffset : (areaHeight - total) / 2);
+        int queueSave = canvas.save(); canvas.clipRect(areaLeft, areaTop, areaLeft + areaWidth, areaTop + areaHeight);
         for (int i = 0; i < tracks.size(); i++) {
             PartyQueueModel.Track track = tracks.get(i);
             boolean active = track.current;
@@ -149,7 +216,11 @@ final class PartyView extends View {
             float inset = active ? 0 : Math.min(2, Math.abs(i - currentIndex)) * (fullscreen ? 20 : 9) * density;
             float x = areaLeft + margin + inset;
             float cardWidth = width - inset * 2;
-            int alpha = active ? 235 : Math.abs(i - currentIndex) > 1 ? 95 : 155;
+            int alpha = active ? 235 : 175;
+            if (!active && trackAction != null && !track.id.isEmpty()) {
+                hitRects.add(new RectF(x, Math.max(areaTop, y), x + cardWidth, Math.min(areaTop + areaHeight, y + height)));
+                hitIds.add(track.id);
+            }
             paint.setColor(Color.argb(alpha, 55, 55, 59));
             rect.set(x, y, x + cardWidth, y + height);
             canvas.drawRoundRect(rect, 9 * density, 9 * density, paint);
@@ -181,16 +252,11 @@ final class PartyView extends View {
                 line(canvas, track.artist, tx, y + height * 0.71f, textWidth,
                         (fullscreen ? 18 : 13) * sp, false, 0xFFE0E0E0);
             }
-            if (active && model.duration > 0) {
-                double elapsed = model.elapsed + (playing ? Math.max(0, SystemClock.elapsedRealtime() - anchor) / 1000.0 : 0);
-                float progress = (float) Math.max(0, Math.min(1, elapsed / model.duration));
-                paint.setColor(0x4400B9F5);
-                canvas.drawRect(x, y + height - 3 * density, x + cardWidth, y + height, paint);
-                paint.setColor(0xFF00B9F5);
-                canvas.drawRect(x, y + height - 3 * density, x + cardWidth * progress, y + height, paint);
-            }
+            if (active && model.duration > 0 && y + height <= areaTop + areaHeight && y + height >= areaTop)
+                progressRect.set(x, y + height - 3 * density, x + cardWidth, y + height);
             y += height + gap;
         }
+        canvas.restoreToCount(queueSave);
     }
 
     private void line(Canvas canvas, String value, float x, float baseline, float width,

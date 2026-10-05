@@ -20,8 +20,8 @@ final class PartyEffects {
     private boolean demo;
 
     void accept(float[] bands, float[] wave, int rate, boolean animated) {
-        target = PartySignal.bounded(bands, false);
-        waveform = PartySignal.bounded(wave, true);
+        target = downsample(PartySignal.bounded(bands, false), 48);
+        waveform = downsample(PartySignal.bounded(wave, true), 96);
         if (levels.length != target.length) levels = new float[target.length];
         lastFrame = SystemClock.elapsedRealtime();
         fps = Math.max(10, Math.min(30, rate)); demo = animated;
@@ -50,10 +50,10 @@ final class PartyEffects {
             for (int i = 0; i < levels.length; i++) {
                 float x = i * cell, amplitude = levels[i] * height * (mirror ? 0.40f : 0.75f);
                 paint.setColor(color(i / (float) levels.length, 215));
-                c.drawRoundRect(x + cell * 0.15f, baseline - amplitude, x + cell * 0.85f, baseline, cell * 0.2f, cell * 0.2f, paint);
+                c.drawRect(x + cell * 0.15f, baseline - amplitude, x + cell * 0.85f, baseline, paint);
                 if (mirror) {
                     paint.setAlpha(85);
-                    c.drawRoundRect(x + cell * 0.15f, baseline, x + cell * 0.85f, baseline + amplitude * 0.7f, cell * 0.2f, cell * 0.2f, paint);
+                    c.drawRect(x + cell * 0.15f, baseline, x + cell * 0.85f, baseline + amplitude * 0.7f, paint);
                     paint.setAlpha(255);
                 }
             }
@@ -81,27 +81,37 @@ final class PartyEffects {
                 paint.setStrokeWidth(layer == 0 ? 3 : 8); c.drawPath(path, paint);
             }
         } else if ("particles".equals(mode)) {
-            for (int i = 0; i < 100; i++) {
+            for (int i = 0; i < 48; i++) {
                 float strength = levels[i % levels.length];
                 float phase = (time * (0.08f + strength * 0.13f) + i * 0.618034f) % 1;
                 double angle = i * 2.39996 + time * 0.08;
                 float distance = phase * Math.max(width, height) * 0.70f;
                 float x = width / 2 + (float) Math.cos(angle) * distance;
                 float y = height / 2 + (float) Math.sin(angle) * distance;
-                paint.setColor(color(i / 100f, (int) (220 * strength * (1 - phase))));
+                paint.setColor(color(i / 48f, (int) (220 * strength * (1 - phase))));
                 c.drawCircle(x, y, 2 + strength * 12, paint);
             }
         } else if ("tunnel".equals(mode)) {
             paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(2 + energy * 9);
-            for (int ring = 0; ring < 14; ring++) {
-                float phase = (ring / 14f + time * 0.07f) % 1;
+            for (int ring = 0; ring < 10; ring++) {
+                float phase = (ring / 10f + time * 0.07f) % 1;
                 float radius = phase * Math.max(width, height) * 0.7f;
-                paint.setColor(color(ring / 14f, (int) (200 * levels[ring % levels.length] * (1 - phase))));
+                paint.setColor(color(ring / 10f, (int) (200 * levels[ring % levels.length] * (1 - phase))));
                 rect.set(width / 2 - radius, height / 2 - radius, width / 2 + radius, height / 2 + radius);
                 c.drawOval(rect, paint);
             }
         }
         paint.setAlpha(255); paint.setStrokeCap(Paint.Cap.BUTT); paint.setStyle(Paint.Style.FILL);
+    }
+    private static float[] downsample(float[] values, int limit) {
+        if (values.length <= limit) return values;
+        float[] result = new float[limit];
+        for (int i = 0; i < limit; i++) {
+            int from = i * values.length / limit, to = (i + 1) * values.length / limit;
+            float sum = 0; for (int j = from; j < to; j++) sum += values[j];
+            result[i] = sum / Math.max(1, to - from);
+        }
+        return result;
     }
     private int color(float position, int alpha) {
         hsv[0] = 165 + position * 185;

@@ -3,7 +3,7 @@
   "apiVersion": 1,
   "id": "party-mode",
   "name": "Party Mode",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "minAndroidSdk": 26,
   "entryClass": "me.jxl.kiosk.plugins.partymode.PartyModePlugin",
   "description": "Standalone full-screen Party queue, MA guest QR and native audio visualizations, with independent visibility and HA actions.",
@@ -18,7 +18,7 @@
     {
       "key": "speakerEntity",
       "type": "entity",
-      "title": "Speaker / h\u00f8jttaler",
+      "title": "Speaker / højttaler",
       "default": "",
       "group": "Party",
       "description": "Music Assistant HA media_player for the speaker group whose queue Party should follow."
@@ -153,20 +153,66 @@
       "description": "Party rendering and audio-frame rate. Independent of the normal spectrum overlay."
     },
     {
-      "key": "showQueue",
-      "type": "boolean",
-      "title": "Show full queue",
-      "default": true,
-      "group": "Presentation",
-      "description": "Otherwise keep a small current-song card for more visual space."
-    },
-    {
       "key": "showGuestQr",
       "type": "boolean",
       "title": "Show MA guest QR",
       "default": true,
       "group": "Guests",
       "description": "Follows MA guest access for the same configured group. Hiding QR does not disable MA guest access."
+    },
+    {
+      "key": "allowSearch",
+      "type": "boolean",
+      "title": "Allow music search",
+      "default": true,
+      "group": "Jukebox",
+      "description": "Search MA tracks; choose Add to queue or Play now. Independent of Menu/Close visibility."
+    },
+    {
+      "key": "allowQueueTap",
+      "type": "boolean",
+      "title": "Allow queue tracks to play on tap",
+      "default": false,
+      "group": "Jukebox",
+      "description": "Tapping previous/upcoming songs starts that queue item immediately. Off locks queue selection."
+    },
+    {
+      "key": "showQuickActions",
+      "type": "boolean",
+      "title": "Show Quick Actions above Party",
+      "default": false,
+      "group": "Jukebox",
+      "description": "Requires Quick Actions 0.2.7+. Each action keeps its own visibility conditions."
+    },
+    {
+      "key": "showEqControls",
+      "type": "boolean",
+      "title": "Show EQ choices in screen menu",
+      "default": false,
+      "group": "Jukebox",
+      "description": "Party Punch and Restore original EQ. MA admin token and DSP-supported Sonos playback required; changes persist until restored."
+    },
+    {
+      "key": "tracksBefore",
+      "type": "number",
+      "title": "Tracks before current",
+      "default": 2,
+      "min": 0,
+      "max": 10,
+      "step": 1,
+      "group": "Jukebox",
+      "description": "Scrollable queue window. Set both counts to 0 for current song only. HA queue hide/show actions remain available."
+    },
+    {
+      "key": "tracksAfter",
+      "type": "number",
+      "title": "Tracks after current",
+      "default": 2,
+      "min": 0,
+      "max": 10,
+      "step": 1,
+      "group": "Jukebox",
+      "description": "Scrollable queue window. Set both counts to 0 for current song only. HA queue hide/show actions remain available."
     }
   ],
   "commands": [
@@ -263,6 +309,9 @@
     },
     {
       "title": "Guests"
+    },
+    {
+      "title": "Jukebox"
     }
   ]
 }
