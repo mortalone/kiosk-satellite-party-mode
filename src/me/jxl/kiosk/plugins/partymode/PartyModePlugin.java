@@ -645,7 +645,7 @@ public final class PartyModePlugin implements KioskPlugin {
         io.execute(() -> {
             java.util.List<PartyJukebox.Result> favorites = null;
             try {
-                Object response = partyRequest(base, token, "music/playlists/library_items", new JSONObject().put("favorite", true).put("limit", 200).put("offset", 0).put("order_by", "sort_name"));
+                Object response = partyRequest(base, token, "music/playlists/library_items", new JSONObject().put("favorite", true).put("summary", false).put("limit", 200).put("offset", 0).put("order_by", "sort_name"));
                 if (response instanceof JSONArray) favorites = PartyJukebox.playlists((JSONArray) response, base);
             } catch (Throwable ignored) {}
             final java.util.List<PartyJukebox.Result> items = favorites;
