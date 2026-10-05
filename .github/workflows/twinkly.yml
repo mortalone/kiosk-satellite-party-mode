@@ -1,0 +1,31 @@
+name: Test and build Twinkly Bridge
+on:
+  push:
+    branches: [main]
+    paths: ["twinkly_bridge/**", ".github/workflows/twinkly.yml", "repository.yaml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r twinkly_bridge/requirements.txt
+      - run: python -m unittest discover -s twinkly_bridge/tests -v
+      - name: Build installable amd64 container
+        run: docker build --build-arg BUILD_VERSION=0.1.0 --build-arg BUILD_ARCH=amd64 -t twinkly-bridge:test twinkly_bridge
+      - name: Verify container startup
+        run: |
+          mkdir /tmp/twinkly-options
+          printf '%s\n' '{"device_ip":"","api_token":"","fps":20,"brightness":30,"speed":1}' > /tmp/twinkly-options/options.json
+          docker run -d --name twinkly-test -p 18100:8100 -v /tmp/twinkly-options:/data:ro twinkly-bridge:test
+          trap 'docker logs twinkly-test; docker rm -f twinkly-test' EXIT
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent http://127.0.0.1:18100/health; then exit 0; fi
+            sleep 1
+          done
+          exit 1

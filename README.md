@@ -93,3 +93,12 @@ Backend compatibility: the original All controls choice migrates to Menu only to
 ### On-demand lyrics (0.1.7)
 
 When neither the queue nor full track metadata contains lyrics, Party now calls MA's `metadata/get_track_lyrics` with the full track, matching MA's own Now Playing screen. This supports lyrics which the metadata provider returns on demand without storing them on the track. The existing MA token needs library-read permission. Android regression checks deliberately omit stored lyrics and require a successful on-demand lookup before passing.
+
+## Twinkly companion add-on
+
+This repository also hosts [Twinkly Bridge](twinkly_bridge/README.md), a Home Assistant
+add-on with isolated xled/xled_plus libraries, an ingress control panel and individual
+LED test patterns. Add this repository URL in the Home Assistant add-on store to
+install it. See [configuration and installation](twinkly_bridge/DOCS.md). The initial
+release prepares an audio receiver; the Kiosk audio sender and physical Flex test
+are still pending.

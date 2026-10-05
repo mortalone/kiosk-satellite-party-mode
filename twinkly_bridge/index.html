@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="da"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Twinkly Bridge</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#0c101a;color:#eef3ff}*{box-sizing:border-box}body{margin:0;padding:clamp(20px,5vw,60px)}main{max-width:780px;margin:auto}header{margin-bottom:32px}h1{font-size:34px;letter-spacing:-1px;margin:8px 0}p{color:#a7b4cc;line-height:1.6}.eyebrow{font-size:12px;color:#75e6d0;letter-spacing:3px}.card{background:#151c2b;border:1px solid #27334b;border-radius:24px;padding:24px;margin:16px 0}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}button{cursor:pointer;border:1px solid #344562;background:#202c42;color:#eff5ff;font:inherit;border-radius:16px;padding:16px;text-align:left}button:hover{background:#2b3d58}button.selected{border-color:#75e6d0;background:#163b3b}button small{display:block;color:#a7b4cc;font-size:12px;margin-top:6px}.row{display:flex;gap:16px;align-items:center;margin:20px 0}label{min-width:88px}input[type=range]{accent-color:#75e6d0;flex:1;min-width:40px}input[type=color]{background:transparent;border:0;width:72px;height:44px}output{min-width:48px;text-align:right}#status{white-space:pre-line;color:#bac8dc;font-size:14px}#error{color:#ffb4ad}footer{font-size:13px;color:#8594ae;margin-top:24px}button:focus-visible{outline:2px solid #75e6d0;outline-offset:3px}@media(max-width:440px){.card{padding:18px}.grid{gap:8px}button{padding:12px}}
+</style>
+<main><header><span class="eyebrow">LOKAL LYSSTYRING</span><h1>Twinkly Bridge</h1><p>Afprøv din Flex, og vælg hvordan lyset bevæger sig.</p></header>
+<section class="card"><div id="status" role="status">Henter status…</div><p id="error" role="alert"></p></section>
+<section class="card"><div class="grid">
+<button data-mode="color">Ensfarvet<small>En rolig, fast farve</small></button>
+<button data-mode="rainbow">Regnbue<small>Farver gennem hele lyset</small></button>
+<button data-mode="chase">Løbelys<small>Test individuel LED-styring</small></button>
+<button data-mode="music">Musik<small>Reagerer på modtagne lyddata</small></button>
+<button data-mode="restore">Tilbage til Twinkly<small>Gendan tidligere tilstand</small></button>
+<button data-mode="off">Sluk<small>Sluk lyset</small></button>
+</div>
+<div class="row"><label for="color">Farve</label><input id="color" type="color" value="#ff4080"></div>
+<div class="row"><label for="brightness">Lysstyrke</label><input id="brightness" type="range" min="0" max="100" value="30"><output id="brightnessValue">30%</output></div>
+<div class="row"><label for="speed">Hastighed</label><input id="speed" type="range" min="0.1" max="5" step="0.1" value="1"><output id="speedValue">1×</output></div>
+</section><footer>Musiktilstand venter på en lydforbindelse. Uden friske lyddata bliver lyset mørkt. Brug “Tilbage til Twinkly” før du styrer lyset i Twinkly-appen eller Home Assistant.</footer></main>
+<script>
+let mode='restore',initialized=false,pending=false;
+const $=id=>document.getElementById(id);
+async function request(path,data){const response=await fetch(path,{method:data?'POST':'GET',headers:data?{'Content-Type':'application/json'}:{},body:data?JSON.stringify(data):undefined});const value=await response.json();if(!response.ok)throw Error(value.error||'Kunne ikke kontakte addon’en');return value;}
+async function refresh(){try{const s=await request('api/status');mode=s.mode;if(!initialized){$('brightness').value=s.brightness;$('brightnessValue').textContent=s.brightness+'%';$('speed').value=s.speed;$('speedValue').textContent=s.speed+'×';initialized=true;}$('status').textContent=(s.connected?'Forbundet · '+s.leds+' LED':'Ikke forbundet')+'\n'+(s.device_ip||'Angiv device_ip under addon’ens konfiguration')+(mode==='music'?'\n'+(s.audio_fresh?'Modtager lyddata':'Venter på lyddata'):'');$('error').textContent=s.error||'';document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('selected',b.dataset.mode===mode));}catch(e){$('error').textContent=e.message;}}
+async function apply(next=mode){if(pending)return;pending=true;try{await request('api/control',{mode:next,color:$('color').value,brightness:Number($('brightness').value),speed:Number($('speed').value)});mode=next;await refresh();}catch(e){$('error').textContent=e.message;}finally{pending=false;}}
+document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>apply(b.dataset.mode)));
+for(const id of ['color','brightness','speed'])$(id).addEventListener('change',()=>apply());
+$('brightness').addEventListener('input',()=>{$('brightnessValue').textContent=$('brightness').value+'%'});
+$('speed').addEventListener('input',()=>{$('speedValue').textContent=$('speed').value+'×'});
+refresh();setInterval(refresh,2000);
+</script></html>

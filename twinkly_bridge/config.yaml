@@ -1,0 +1,28 @@
+name: Twinkly Bridge
+version: "0.1.0"
+slug: twinkly_bridge
+description: Local Twinkly LED control and music spectrum receiver using xled_plus
+url: https://github.com/mortalone/kiosk-satellite-party-mode/tree/main/twinkly_bridge
+arch: [amd64, aarch64]
+startup: application
+boot: manual
+init: false
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:led-strip-variant
+ports:
+  8100/tcp: null
+ports_description:
+  8100/tcp: Optional authenticated API for Kiosk and Home Assistant automations
+options:
+  device_ip: ""
+  api_token: ""
+  brightness: 30
+  fps: 20
+  speed: 1
+schema:
+  device_ip: str
+  api_token: password
+  brightness: int(0,100)
+  fps: int(5,30)
+  speed: float(0.1,5)
