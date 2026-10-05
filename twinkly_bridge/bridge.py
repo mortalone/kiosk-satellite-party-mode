@@ -366,7 +366,7 @@ def handler_for(bridge, ingress=False):
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
     options = json.loads(Path("/data/options.json").read_text())
     bridge = Bridge(options)
     from sendspin_source import SendspinSource

@@ -153,7 +153,7 @@ class SendspinSource:
     async def modern(self, identity, store, session):
         client = SendspinClient(identity, "Twinkly Bridge", [Roles.VISUALIZER], pairing_store=store,
             visualizer_support=self.support, session=session,
-            device_info=DeviceInfo(product_name="Twinkly Bridge", manufacturer="Kiosk companion", software_version="0.1.1"))
+            device_info=DeviceInfo(product_name="Twinkly Bridge", manufacturer="Kiosk companion", software_version="0.1.2"))
         disconnected = asyncio.Event()
         client.add_visualizer_listener(lambda frames: self.receive(frames, client))
         client.add_group_update_listener(self.group_update)
@@ -164,9 +164,12 @@ class SendspinSource:
             await asyncio.wait_for(client.connect(self.url), timeout=15)
             await client.send_available(available=True)
             self.update(connected=True, state="connected", protocol="noise", error="")
+            LOG.info("Sendspin connected using encrypted visualizer transport")
             while not self.stopping.is_set() and not disconnected.is_set():
+                self.update(clock_synced=client.is_time_synchronized())
                 await asyncio.sleep(0.2)
         finally:
+            LOG.info("Sendspin connection ending (%s)", "addon stopping" if self.stopping.is_set() else "connection closed or failed")
             await client.disconnect()
 
     async def legacy(self, identity, session, socket=None, hello=None):
@@ -179,7 +182,7 @@ class SendspinSource:
         await socket.send_json({"type": "client/hello", "payload": {"client_id": identity.peer_id,
             "name": "Twinkly Bridge", "version": 1, "supported_roles": ["visualizer@v1"],
             "visualizer@v1_support": self.support.to_dict(),
-            "device_info": {"product_name": "Twinkly Bridge", "software_version": "0.1.1"}}})
+            "device_info": {"product_name": "Twinkly Bridge", "software_version": "0.1.2"}}})
         await socket.send_json({"type": "client/state", "payload": {"available": True, "state": "synchronized"}})
         async def synchronize():
             while not self.stopping.is_set() and not socket.closed:

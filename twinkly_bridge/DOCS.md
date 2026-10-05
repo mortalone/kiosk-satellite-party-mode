@@ -135,7 +135,10 @@ Do not feed this endpoint concurrently with an active Sendspin source.
 # Limitations and troubleshooting
 
 This uses unofficial local Twinkly APIs. Chase output was confirmed on the user's
-Flex with 0.1.0; the complete 0.1.1 update still needs a real-device test.
+Flex with 0.1.0. Direct Sendspin visualization was confirmed on the user's Flex
+with 0.1.1 through both a browser player and the Pi Sendspin player. Membership
+retention under a universal group remains unresolved. 0.1.2 adds clearer status
+and timestamped diagnostics, not an automatic grouping fix.
 Connection errors appear in the UI and log, with retries every five seconds.
 Verify the IP and local network access first. Authentication, firmware or LED protocol
 differences may require adaptation after the first hardware test. No firmware update

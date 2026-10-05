@@ -141,6 +141,9 @@ class ProtocolTest(unittest.IsolatedAsyncioTestCase):
                     client.send_role_message('visualizer',StreamStartMessage(payload=StreamStartPayload(visualizer=StreamStartVisualizer.from_support(source.support))))
                     # Give the protocol time filter its two initial samples.
                     await asyncio.sleep(0.6)
+                    await eventually_async(lambda: source.status()['clock_synced'])
+                    self.assertEqual(source.status()['frames_received'],0,
+                        'clock status must update even before music frames arrive')
                     for _ in range(20):
                         stamp=server.clock.now_us()+200000
                         packet=bytes([19])+struct.pack('>q',stamp)+struct.pack('>32H',*([65535]*32))

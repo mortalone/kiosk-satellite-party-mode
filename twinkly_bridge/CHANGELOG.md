@@ -1,3 +1,12 @@
+# 0.1.2
+
+- Handle non-JSON ingress/proxy responses with a readable HTTP status instead of a JSON parser exception.
+- Mark all displayed measurements as unknown when a status request fails; do not leave a stale frame counter looking current.
+- Bound browser requests to eight seconds and recover automatically on the next poll.
+- Update Sendspin clock status independently of incoming music frames.
+- Add timestamps, logger names and encrypted connection lifecycle events to diagnostics.
+- This diagnostic release does not claim to fix Twinkly token rejection or universal-group membership.
+
 # 0.1.1
 
 - Direct Music Assistant Sendspin visualizer client; no Kiosk audio relay or local FFT.

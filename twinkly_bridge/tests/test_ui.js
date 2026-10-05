@@ -1,7 +1,13 @@
 const assert = require('node:assert/strict');
-const {ControlQueue} = require('../ui.js');
+const {ControlQueue,readApiResponse} = require('../ui.js');
 const deferred = () => {let resolve; const promise = new Promise(r => {resolve=r}); return {promise,resolve};};
 (async () => {
+  const response = (status, body) => ({status,ok:status===200,text:async()=>body});
+  await assert.rejects(readApiResponse(response(503,'503: Service Unavailable')), /HTTP 503.*ikke JSON/);
+  await assert.rejects(readApiResponse(response(200,'<html>Sign in</html>')), /ikke JSON/);
+  await assert.rejects(readApiResponse(response(200,'null')), /ugyldigt/);
+  await assert.rejects(readApiResponse(response(401,'{"error":"Authentication required"}')), /Authentication required/);
+  assert.deepEqual(await readApiResponse(response(200,'{"revision":3,"mode":"music"}')), {revision:3,mode:'music'});
   const calls=[], responses=[], errors=[];
   const queue = new ControlQueue(patch => {calls.push(patch);const d=deferred();responses.push(d);return d.promise;}, () => {}, error => errors.push(error));
   queue.accept({mode:'restore',revision:0},0);

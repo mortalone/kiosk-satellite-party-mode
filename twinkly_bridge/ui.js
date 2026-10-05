@@ -1,4 +1,14 @@
 /* Merge rapid adjustments and reject status responses from before a user's action. */
+async function readApiResponse(response) {
+  const body = await response.text();
+  let value;
+  try { value = JSON.parse(body); } catch (_) {
+    throw Error('Kunne ikke hente addon-status (HTTP '+response.status+'). Svaret var ikke JSON. Prøv at åbne webgrænsefladen igen.');
+  }
+  if (!response.ok) throw Error(value?.error || 'Kunne ikke kontakte addon’en (HTTP '+response.status+').');
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error('Addon’en returnerede et ugyldigt statussvar.');
+  return value;
+}
 class ControlQueue {
   constructor(send, onState, onError) {
     this.send = send; this.onState = onState; this.onError = onError;
@@ -31,14 +41,19 @@ class ControlQueue {
     } finally { this.sending = false; }
   }
 }
-if (typeof module !== 'undefined') module.exports = {ControlQueue};
+if (typeof module !== 'undefined') module.exports = {ControlQueue, readApiResponse};
 if (typeof document !== 'undefined') {
   const $ = id => document.getElementById(id);
   async function request(path, data) {
-    const response = await fetch(path, {method:data?'POST':'GET', headers:data?{'Content-Type':'application/json'}:{}, body:data?JSON.stringify(data):undefined});
-    const value = await response.json();
-    if (!response.ok) throw Error(value.error || 'Kunne ikke kontakte addon’en');
-    return value;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      const response = await fetch(path, {signal:controller.signal, method:data?'POST':'GET', headers:data?{'Content-Type':'application/json'}:{}, body:data?JSON.stringify(data):undefined});
+      return await readApiResponse(response);
+    } catch (error) {
+      if (error.name === 'AbortError') throw Error('Statusforespørgslen tog for lang tid. Prøv at åbne webgrænsefladen igen.');
+      throw error;
+    } finally { clearTimeout(timeout); }
   }
   const controls = new ControlQueue(patch => request('api/control', patch), state => {
     document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('selected', b.dataset.mode === state.mode));
@@ -62,7 +77,12 @@ if (typeof document !== 'undefined') {
       $('source').textContent = source.connected ? 'Sendspin forbundet'+(source.group?' · '+source.group:'')+'\n'+(s.audio_fresh?'Modtager visualiseringsdata':source.clock_synced?'Venter på musik fra gruppen':'Synkroniserer ur…') : source.state === 'disabled' ? 'Angiv sendspin_url under konfiguration' : 'Sendspin: '+(source.state||'venter');
       $('error').textContent = [s.error, source.error].filter(Boolean).join('\n');
       $('diagnostics').textContent = 'Ønsket: '+s.mode+' · Aktiv: '+s.applied_mode+' · Gendannet realtime: '+s.recoveries+' · Frames: '+(source.frames_rendered||0);
-    } catch (error) { $('error').textContent = error.message; }
+    } catch (error) {
+      $('error').textContent = error.message;
+      $('status').textContent = 'Aktuel status kunne ikke hentes';
+      $('source').textContent = 'Sendspin-status ukendt – forbindelsen kan stadig være aktiv';
+      $('diagnostics').textContent = 'Ingen aktuelle målinger; den tidligere frame-tæller er ikke længere bekræftet';
+    }
     finally { refreshing = false; }
   }
   document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => controls.change({mode:b.dataset.mode})));
