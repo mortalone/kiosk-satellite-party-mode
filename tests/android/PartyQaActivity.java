@@ -66,6 +66,7 @@ public final class PartyQaActivity extends Activity {
             @Override public void log(String message) { android.util.Log.i("PARTY_QA", message); }
             @Override public void status(String message, boolean error) { android.util.Log.i("PARTY_QA", message); }
         }, settings);
+        main.postDelayed(() -> { try { Field f=PartyModePlugin.class.getDeclaredField("currentActivity");f.setAccessible(true);f.set(plugin,this);call("updatePresentation"); }catch(Exception e){throw new RuntimeException(e);} },500);
         registerReceiver(receiver, new IntentFilter("party.qa.MODE"));
         main.postDelayed(new Runnable() { @Override public void run() {
             float[] bands = new float[64], wave = new float[128]; double time = SystemClock.elapsedRealtime() / 800.0;

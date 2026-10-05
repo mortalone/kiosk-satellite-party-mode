@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: party-mode-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -80,6 +84,11 @@ jobs:
         run: |
           VERSION=$(python3 -c 'import json; print(json.load(open("kiosk-satellite-plugin.json"))["version"])')
           TAG="v$VERSION"
+          CURRENT_HEAD=$(gh api "repos/${{ github.repository }}/git/ref/heads/main" --jq '.object.sha')
+          if [ "$CURRENT_HEAD" != "$GITHUB_SHA" ]; then
+            echo "A newer commit supersedes this build; release skipped."
+            exit 0
+          fi
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists; skipping."
             exit 0

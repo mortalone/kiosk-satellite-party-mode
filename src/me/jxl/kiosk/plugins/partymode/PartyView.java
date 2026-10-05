@@ -55,7 +55,7 @@ final class PartyView extends FrameLayout {
     private float scrollOffset, maxScroll, touchY, lastTouchY;
     private boolean scrolling;
     private String currentId = "";
-    private final Runnable redraw = () -> { framePending = false; invalidate(); };
+    private final Runnable redraw = () -> { framePending = false; invalidate(); if (progressCanvas != null) progressCanvas.invalidate(); };
     private void requestFrame() {
         if (framePending) return;
         framePending = true;
@@ -159,7 +159,6 @@ final class PartyView extends FrameLayout {
                         getWidth() - 82 * density, 12 * sp, false, 0xDDFFFFFF);
             }
         }
-        progressCanvas.invalidate();
         if (playing && !"off".equals(effect) && effects.fresh()) requestFrame();
         else if (playing && !framePending) { framePending = true; postDelayed(redraw, 1000); }
     }

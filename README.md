@@ -44,7 +44,7 @@ Add this full repository URL in Kiosk Satellite's Plugin Manager:
 
 https://github.com/mortalone/kiosk-satellite-party-mode
 
-Use Party Mode 0.1.4+, Now Playing 0.2.4+, Spectrum Visualizer 0.2.11+ and Quick Actions 0.2.7+. The companions retain their own visibility when Party closes. Update Now Playing to remove the old full-screen Party actions, then enable this plugin and select the intended MA speaker group.
+Use Party Mode 0.1.5+, Now Playing 0.2.4+, Spectrum Visualizer 0.2.11+ and Quick Actions 0.2.7+. The companions retain their own visibility when Party closes. Update Now Playing to remove the old full-screen Party actions, then enable this plugin and select the intended MA speaker group.
 
 ```sh
 python3 tools/build.py --android-platform 35
@@ -72,7 +72,7 @@ MA requires an **admin token** to save DSP. Individual DSP is supported for Sono
 
 The queue, artwork, and QR code use a retained native drawing layer. Audio updates and animation share one bounded frame scheduler, while playback progress runs at 1 Hz without an effect. Effects use up to 48 spectrum bars, 96 waveform samples, 48 particles, and 10 tunnel rings. Paused playback has no continuous animation loop. The existing 10/20/30 FPS choice remains available; start with 10 FPS on a slower Pi. Performance must be checked on the actual kiosk device.
 
-## Modern panels, lyrics and event playlists (0.1.4)
+## Modern panels, lyrics and event playlists (0.1.5)
 
 Search uses a drawn magnifying-glass icon, a dark rounded field, cover thumbnails and readable title/artist rows. Settings uses the same dark native sheet instead of the old platform popup. Previous/upcoming cards progressively narrow with their distance from the current song.
 

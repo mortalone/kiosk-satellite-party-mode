@@ -1,4 +1,4 @@
-Party Mode 0.1.4
+Party Mode 0.1.5
 
 - Close hidden by default; modern vector search/settings icons.
 - Compact −/+ group volume controls; optional styled slider, with independent playback visibility.

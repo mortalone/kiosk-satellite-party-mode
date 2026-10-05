@@ -60,7 +60,7 @@ final class PartyUi {
             lp.width = Math.min(dp(a, drawer ? 420 : 560), a.getResources().getDisplayMetrics().widthPixels - dp(a, 24));
             lp.height = Math.min(dp(a, 720), a.getResources().getDisplayMetrics().heightPixels - dp(a, 64));
             lp.gravity = drawer ? Gravity.RIGHT | Gravity.CENTER_VERTICAL : Gravity.CENTER;
-            w.setAttributes(lp); w.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+            w.setAttributes(lp); w.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE | WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
             w.setNavigationBarColor(SURFACE);
         }
         d.setOnShowListener(dialog -> {

@@ -695,8 +695,10 @@ public final class PartyModePlugin implements KioskPlugin {
                 placeTrack(media.uri, number, queue, generation); if (selectionDialog != null) selectionDialog.dismiss();
             });
         }
-        selectionDialog = PartyUi.sheet(a, playlist ? "Vælg stemning" : "Tilføj til jukebox", body, false);
-        if (selectionDialog.getWindow() != null) selectionDialog.getWindow().setLayout(Math.min(dp(520), a.getResources().getDisplayMetrics().widthPixels - dp(24)), Math.min(dp(470), a.getResources().getDisplayMetrics().heightPixels - dp(64)));
+        ScrollView choiceScroll = new ScrollView(a); choiceScroll.setVerticalScrollBarEnabled(false); choiceScroll.addView(body);
+        LinearLayout choiceBody = panelBody(a); choiceBody.addView(choiceScroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        selectionDialog = PartyUi.sheet(a, playlist ? "Vælg stemning" : "Tilføj til jukebox", choiceBody, false);
+        if (selectionDialog.getWindow() != null) selectionDialog.getWindow().setLayout(Math.min(dp(520), a.getResources().getDisplayMetrics().widthPixels - dp(24)), Math.min(dp(560), a.getResources().getDisplayMetrics().heightPixels - dp(64)));
         selectionDialog.setOnDismissListener(d -> selectionDialog = null); selectionDialog.show();
     }
     private void placeTrack(String uri, int position, String queue, long generation) {
