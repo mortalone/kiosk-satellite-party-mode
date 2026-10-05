@@ -1,8 +1,10 @@
-# Party Mode 0.1.1
+# Party Mode 0.1.2
 
-- Fix installation error: `Unexpected or duplicate ZIP entry: THIRD_PARTY_NOTICES.md`.
-- Include all QR library notices in the accepted `LICENSE` file rather than an unsupported extra root entry.
-- Verify the actual built ZIP with Kiosk Satellite's pinned SDK 1 `PluginPackage` and `PluginManifest` before release. Check extraction, DEX, manifest, checksum and bundled license. Reproduce the original rejection as a regression check.
-- Preserve independent Party visibility, Home Assistant actions, screen controls, queue, guest QR and visual effects.
+- Add independent Show volume and Show playback controls settings for full-screen Party. Both are enabled by default.
+- Add bottom MA group-volume slider and Play/Pause + Stop buttons; independently selectable alongside the existing Settings/Close visibility.
+- Add two saved HA toggle actions and two screen-menu checkboxes for their visibility.
+- Target only the selected MA queue/group. Volume uses MA group volume rather than Kiosk master volume or visualizer gain.
+- Disable unknown/unavailable controls, reject stale queue/volume responses and protect slider releases when the selected queue changes.
+- Preserve the corrected ZIP packaging and verify it with the actual Kiosk installer before publication.
 
-Retry installation using https://github.com/mortalone/kiosk-satellite-party-mode. Use Now Playing 0.2.4, Spectrum Visualizer 0.2.11 and Quick Actions 0.2.6.
+Only Party Mode needs updating for this change. Use https://github.com/mortalone/kiosk-satellite-party-mode. Android builds, installer extraction and automated queue/control tests run before release; live MA commands and touch layout require kiosk verification.

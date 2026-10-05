@@ -7,8 +7,10 @@ A standalone full-screen plugin with its own settings, Home Assistant actions an
 1. Connect Music Assistant in Kiosk Satellite so its URL and token are available.
 2. Select the group's **Music Assistant HA media_player** in **Speaker / højttaler**. Party follows that entity's `active_queue`; it does not select an output or change speaker volume.
 3. Enable Party Mode and use **Start Party Mode**. Alternatively enable **Start automatically when visibility allows** and configure Party's own visibility. Automatic start defaults off so installing the plugin does not immediately cover the settings screen.
-4. Choose screen controls: **All controls**, **Close only**, or **Hidden**. All controls shows a labeled **Indstillinger** menu beside Close at the top. Home Assistant actions work in every mode.
+4. Choose screen controls: **All controls**, **Close only**, or **Hidden**. All controls shows a labeled **Indstillinger** menu beside Close at the top. This setting affects only those two buttons. **Show volume** and **Show playback controls** independently enable the bottom volume slider and Play/Pause + Stop. Both are on by default. Home Assistant actions work in every mode.
 5. For audio effects, enable Spectrum Visualizer **0.2.11+** as the audio analyzer. Its existing source/capture settings determine audio input. Party owns its effect, gain and FPS; it hides the normal spectrum overlay while Party is displayed. Choosing `off` requires no audio capture.
+
+The bottom buttons operate the selected MA queue. The volume slider uses MA group volume for that queue’s speaker/group, never Kiosk’s master volume. It shows the actual MA group volume and sends a change when the slider is released. Missing queue/connection or unknown volume disables the affected control. The MA token needs queue-control and player read/control permissions. Volume and visualization gain remain separate.
 
 ## Independent visibility
 
@@ -30,6 +32,7 @@ Guest-enable/disable actions write only `enable_guest_access` on the single enab
 - Visualization: None, Neon Spectrum, Mirror Spectrum, Radial Pulse, Waveform, Star Particles, Neon Tunnel.
 - Screen controls: Settings and Close / Close only / Hidden.
 - Layout: full queue / current song only.
+- Show/hide volume and show/hide playback controls: two independent saved toggle actions. The screen menu also has separate checkboxes. These visibility actions do not change playback or volume.
 - Guest QR: follow Music Assistant / hide.
 - Guests: enable / disable Music Assistant guest access.
 
@@ -41,7 +44,7 @@ Add this full repository URL in Kiosk Satellite's Plugin Manager:
 
 https://github.com/mortalone/kiosk-satellite-party-mode
 
-Use Party Mode 0.1.1+, Now Playing 0.2.4+, Spectrum Visualizer 0.2.11+ and Quick Actions 0.2.6+. The companions retain their own visibility when Party closes. Update Now Playing to remove the old full-screen Party actions, then enable this plugin and select the intended MA speaker group.
+Use Party Mode 0.1.2+, Now Playing 0.2.4+, Spectrum Visualizer 0.2.11+ and Quick Actions 0.2.6+. The companions retain their own visibility when Party closes. Update Now Playing to remove the old full-screen Party actions, then enable this plugin and select the intended MA speaker group.
 
 ```sh
 python3 tools/build.py --android-platform 35

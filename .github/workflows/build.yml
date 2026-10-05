@@ -32,8 +32,8 @@ jobs:
           curl --fail --silent --show-error --location https://repo.maven.apache.org/maven2/org/json/json/20240303/json-20240303.jar -o /tmp/party-json.jar
           curl --fail --silent --show-error --location https://repo.maven.apache.org/maven2/com/google/zxing/core/3.5.3/core-3.5.3.jar -o /tmp/qr-decoder.jar
           mkdir -p /tmp/party-test
-          javac --release 8 -cp /tmp/qr-decoder.jar:/tmp/party-json.jar -d /tmp/party-test src/io/nayuki/qrcodegen/*.java src/me/jxl/kiosk/plugins/partymode/PartyGuestLink.java src/me/jxl/kiosk/plugins/partymode/PartySignal.java src/me/jxl/kiosk/plugins/partymode/PartyGuestConfig.java src/me/jxl/kiosk/plugins/partymode/PartyQueueModel.java src/me/jxl/kiosk/plugins/partymode/PartyActivation.java src/me/jxl/kiosk/plugins/partymode/PartyVisibility.java tests/*.java
-          for TEST in PartyQueueModelTest PartyGuestLinkTest PartyGuestConfigTest PartySignalTest PartyQrTest PartyActivationTest; do
+          javac --release 8 -cp /tmp/qr-decoder.jar:/tmp/party-json.jar -d /tmp/party-test src/io/nayuki/qrcodegen/*.java src/me/jxl/kiosk/plugins/partymode/PartyGuestLink.java src/me/jxl/kiosk/plugins/partymode/PartySignal.java src/me/jxl/kiosk/plugins/partymode/PartyGuestConfig.java src/me/jxl/kiosk/plugins/partymode/PartyQueueModel.java src/me/jxl/kiosk/plugins/partymode/PartyActivation.java src/me/jxl/kiosk/plugins/partymode/PartyVisibility.java src/me/jxl/kiosk/plugins/partymode/PartyPlayerControls.java tests/*.java
+          for TEST in PartyQueueModelTest PartyGuestLinkTest PartyGuestConfigTest PartySignalTest PartyQrTest PartyActivationTest PartyPlayerControlsTest; do
             java -cp /tmp/party-test:/tmp/party-json.jar:/tmp/qr-decoder.jar "me.jxl.kiosk.plugins.partymode.$TEST"
           done
       - name: Verify release ZIP with Kiosk Satellite installer

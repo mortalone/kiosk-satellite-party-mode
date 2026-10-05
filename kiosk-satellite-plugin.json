@@ -3,7 +3,7 @@
   "apiVersion": 1,
   "id": "party-mode",
   "name": "Party Mode",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "minAndroidSdk": 26,
   "entryClass": "me.jxl.kiosk.plugins.partymode.PartyModePlugin",
   "description": "Standalone full-screen Party queue, MA guest QR and native audio visualizations, with independent visibility and HA actions.",
@@ -85,7 +85,7 @@
     {
       "key": "screenControls",
       "type": "select",
-      "title": "Screen controls",
+      "title": "Menu and Close buttons",
       "default": "All controls",
       "options": [
         "All controls",
@@ -93,7 +93,23 @@
         "Hidden"
       ],
       "group": "Presentation",
-      "description": "All controls shows Settings and Close at the top. HA actions always work, including when screen controls are hidden."
+      "description": "Controls only the Settings and Close buttons. Volume and playback buttons have independent visibility settings. HA actions always work."
+    },
+    {
+      "key": "showVolume",
+      "type": "boolean",
+      "title": "Show volume",
+      "default": true,
+      "group": "Presentation",
+      "description": "Show the MA speaker/group volume slider in full-screen Party. Independent of playback buttons and the Settings/Close buttons. Changes speaker volume, not visualization gain."
+    },
+    {
+      "key": "showPlaybackControls",
+      "type": "boolean",
+      "title": "Show playback controls",
+      "default": true,
+      "group": "Presentation",
+      "description": "Show Play/Pause and Stop for the selected MA queue. Independent of the volume slider and Settings/Close buttons."
     },
     {
       "key": "effect",
@@ -225,6 +241,14 @@
     {
       "id": "controlsHidden",
       "title": "Screen controls: hidden (saved)"
+    },
+    {
+      "id": "volumeToggle",
+      "title": "Show/hide volume (saved)"
+    },
+    {
+      "id": "playbackToggle",
+      "title": "Show/hide playback controls (saved)"
     }
   ],
   "groups": [

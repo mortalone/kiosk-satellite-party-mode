@@ -21,6 +21,8 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import io.nayuki.qrcodegen.QrCode;
 import me.jxl.kiosk.plugins.KioskPlugin;
@@ -61,6 +63,13 @@ public final class PartyModePlugin implements KioskPlugin {
     private PartyView partyView;
     private boolean partyFullscreen, automatic, onlyPlaying, showPaused = true;
     private String screenControls = "All controls";
+    private boolean showVolume = true, showPlayback = true, volumeDragging, playerCommandPending, playerVolumePending;
+    private int playerVolume = -1;
+    private long playerVolumeLastPoll, playerVolumeLastSuccess;
+    private long playerVolumeRevision;
+    private SeekBar volumeSlider;
+    private TextView volumeLabel, playbackButton, stopButton;
+    private String volumeDragQueue = "";
     private String nowPlayingEntity = "", visibilityEntity = "", visibilityCondition = "Always", visibilityValue = "", visibilityState = "";
     private String mediaState = "", mediaIdentity = "";
     private Map<?, ?> mediaAttributes = Collections.emptyMap();
@@ -87,7 +96,7 @@ public final class PartyModePlugin implements KioskPlugin {
             pollMedia(); pollVisibility();
             updatePresentation();
             if (partyFullscreen) {
-                updateParty(); pollPartyQueue(); pollPartyGuests();
+                updateParty(); pollPartyQueue(); pollPartyGuests(); pollPlayerVolume();
                 publishPresentation();
                 if (activeKioskActivity() != null && SystemClock.elapsedRealtime() - partyLastPostpone > 15000) {
                     partyLastPostpone = SystemClock.elapsedRealtime(); partyHostCommand("postponeScreensaver");
@@ -130,6 +139,7 @@ public final class PartyModePlugin implements KioskPlugin {
         if (!speaker.equals(nowPlayingEntity)) {
             partyGeneration++; partyModel = null; partyTarget = ""; partyLastSuccess = 0;
             mediaAttributes = Collections.emptyMap(); mediaState = ""; mediaIdentity = ""; lastPosition = Double.NaN;
+            playerVolume = -1; playerVolumeLastSuccess = 0; playerVolumeLastPoll = 0;
             clearPartyGuests();
         }
         nowPlayingEntity = speaker;
@@ -145,6 +155,8 @@ public final class PartyModePlugin implements KioskPlugin {
         SharedPreferences prefs = context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE);
         partyEffect = PartySignal.effect(savedChoice(prefs, "effect", setting(settings, "effect", "off")));
         screenControls = savedChoice(prefs, "controls", setting(settings, "screenControls", "All controls"));
+        showVolume = Boolean.parseBoolean(savedChoice(prefs, "volume_visible", String.valueOf(!Boolean.FALSE.equals(settings.get("showVolume")))));
+        showPlayback = Boolean.parseBoolean(savedChoice(prefs, "playback_visible", String.valueOf(!Boolean.FALSE.equals(settings.get("showPlaybackControls")))));
         partyQueueVisible = Boolean.parseBoolean(savedChoice(prefs, "queue_visible", String.valueOf(!Boolean.FALSE.equals(settings.get("showQueue")))));
         partyGuestsFollow = Boolean.parseBoolean(savedChoice(prefs, "guests_follow", String.valueOf(!Boolean.FALSE.equals(settings.get("showGuestQr")))));
         Set<String> wanted = new HashSet<>();
@@ -175,6 +187,8 @@ public final class PartyModePlugin implements KioskPlugin {
             else if ("partyGuestsFollow".equals(command) || "partyGuestsHide".equals(command)) setPartyGuests("partyGuestsFollow".equals(command));
             else if ("partyGuestEnable".equals(command) || "partyGuestDisable".equals(command)) changePartyGuestAccess("partyGuestEnable".equals(command));
             else if ("partyQueueShow".equals(command) || "partyQueueHide".equals(command)) setPartyQueue("partyQueueShow".equals(command));
+            else if ("volumeToggle".equals(command)) setPlayerControlsVisible(true, !showVolume);
+            else if ("playbackToggle".equals(command)) setPlayerControlsVisible(false, !showPlayback);
             else if ("controlsAll".equals(command) || "controlsClose".equals(command) || "controlsHidden".equals(command)) {
                 screenControls = "controlsAll".equals(command) ? "All controls" : "controlsClose".equals(command) ? "Close only" : "Hidden";
                 context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit().putString("controls", screenControls).apply();
@@ -244,6 +258,7 @@ public final class PartyModePlugin implements KioskPlugin {
         if (!attr(attrs, "active_queue", "").equals(attr(mediaAttributes, "active_queue", ""))) {
             partyGeneration++; partyModel = null; partyTarget = ""; partyLastSuccess = 0;
             clearPartyGuests(); partyGuestLastPoll = 0;
+            playerVolume = -1; playerVolumeLastSuccess = 0; playerVolumeLastPoll = 0;
         }
         mediaIdentity = identity; lastPosition = position; mediaState = state; mediaAttributes = attrs;
     }
@@ -298,6 +313,7 @@ public final class PartyModePlugin implements KioskPlugin {
         partyView = new PartyView(activity, true); partyView.setPresentation(partyEffect, partyQueueVisible);
         FrameLayout.LayoutParams body = new FrameLayout.LayoutParams(-1, -1);
         body.topMargin = "Hidden".equals(screenControls) ? 0 : dp(70);
+        body.bottomMargin = dp((showPlayback ? 64 : 0) + (showVolume ? 64 : 0));
         root.addView(partyView, body);
         if (!"Hidden".equals(screenControls)) {
             TextView close = button(activity, "×", "Afslut Party Mode");
@@ -311,9 +327,11 @@ public final class PartyModePlugin implements KioskPlugin {
                 menu.setOnClickListener(v -> showPartyMenu(menu));
             }
         }
+        addPlayerControls(root, activity);
         ((FrameLayout) content).addView(root, new FrameLayout.LayoutParams(-1, -1));
         root.setZ(100000f); root.bringToFront(); root.requestApplyInsets();
         partyRoot = root; partyActivity = activity;
+        updatePlayerControls();
     }
     private TextView button(Activity activity, String title, String description) {
         TextView view = new TextView(activity); view.setText(title); view.setTextColor(Color.WHITE); view.setTextSize("×".equals(title) ? 28 : 16);
@@ -321,9 +339,153 @@ public final class PartyModePlugin implements KioskPlugin {
         GradientDrawable bg = new GradientDrawable(); bg.setColor(0xDD353539); bg.setCornerRadius(dp(24)); view.setBackground(bg);
         return view;
     }
+    private void setPlayerControlsVisible(boolean volume, boolean visible) {
+        if (volume) showVolume = visible; else showPlayback = visible;
+        context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit()
+                .putString(volume ? "volume_visible" : "playback_visible", String.valueOf(visible)).apply();
+        removePartyView(); updatePresentation();
+        if (volume && visible) { playerVolumeLastPoll = 0; pollPlayerVolume(); }
+    }
+    private LinearLayout playerControlRow(Activity activity) {
+        LinearLayout row = new LinearLayout(activity); row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(dp(4), dp(4), dp(4), dp(4));
+        GradientDrawable background = new GradientDrawable(); background.setColor(0xE6353539);
+        background.setCornerRadius(dp(16)); row.setBackground(background);
+        return row;
+    }
+    private void addPlayerControls(FrameLayout root, Activity activity) {
+        if (showPlayback) {
+            LinearLayout row = playerControlRow(activity);
+            playbackButton = button(activity, "▶ Afspil", "Afspil eller pause den valgte MA-kø");
+            stopButton = button(activity, "■ Stop", "Stop den valgte MA-kø");
+            for (TextView view : new TextView[] {playbackButton, stopButton}) {
+                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(48), 1);
+                params.leftMargin = dp(4); params.rightMargin = dp(4); row.addView(view, params);
+            }
+            playbackButton.setOnClickListener(v -> {
+                try { sendPlayerCommand(PartyPlayerControls.playback(activeQueue(), "playing".equalsIgnoreCase(mediaState)), -1); }
+                catch (Exception error) { reportPlayerCommandError(); }
+            });
+            stopButton.setOnClickListener(v -> {
+                try { sendPlayerCommand(PartyPlayerControls.stop(activeQueue()), -1); }
+                catch (Exception error) { reportPlayerCommandError(); }
+            });
+            FrameLayout.LayoutParams layout = new FrameLayout.LayoutParams(-1, dp(56), Gravity.BOTTOM);
+            layout.leftMargin = dp(12); layout.rightMargin = dp(12); layout.bottomMargin = dp(8);
+            root.addView(row, layout);
+        }
+        if (showVolume) {
+            LinearLayout row = playerControlRow(activity);
+            volumeLabel = new TextView(activity); volumeLabel.setTextColor(Color.WHITE); volumeLabel.setTextSize(14);
+            volumeLabel.setGravity(Gravity.CENTER); volumeLabel.setMaxLines(2);
+            row.addView(volumeLabel, new LinearLayout.LayoutParams(dp(98), -1));
+            volumeSlider = new SeekBar(activity); volumeSlider.setMax(100);
+            volumeSlider.setContentDescription("Højttalergruppens volumen");
+            row.addView(volumeSlider, new LinearLayout.LayoutParams(0, dp(48), 1));
+            volumeSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                    if (fromUser && volumeLabel != null) volumeLabel.setText("Volumen " + progress + " %");
+                }
+                @Override public void onStartTrackingTouch(SeekBar bar) {
+                    volumeDragging = true; volumeDragQueue = activeQueue();
+                }
+                @Override public void onStopTrackingTouch(SeekBar bar) {
+                    String queue = volumeDragQueue; volumeDragging = false; volumeDragQueue = "";
+                    if (!queue.equals(activeQueue()) || queue.isEmpty()) { updatePlayerControls(); return; }
+                    try { sendPlayerCommand(PartyPlayerControls.volume(queue, bar.getProgress()), bar.getProgress()); }
+                    catch (Exception error) { reportPlayerCommandError(); }
+                }
+            });
+            FrameLayout.LayoutParams layout = new FrameLayout.LayoutParams(-1, dp(56), Gravity.BOTTOM);
+            layout.leftMargin = dp(12); layout.rightMargin = dp(12); layout.bottomMargin = dp(showPlayback ? 72 : 8);
+            root.addView(row, layout);
+        }
+    }
+    private String activeQueue() { return attr(mediaAttributes, "active_queue", "").trim(); }
+    private boolean playerControlsReady() {
+        return host != null && partyFullscreen && !activeQueue().isEmpty() &&
+                !"unknown".equalsIgnoreCase(mediaState) && !"unavailable".equalsIgnoreCase(mediaState) &&
+                !maBaseUrl.isEmpty() && !maToken.isEmpty() && !playerCommandPending;
+    }
+    private void updatePlayerControls() {
+        boolean ready = playerControlsReady();
+        if (playbackButton != null) {
+            playbackButton.setText("playing".equalsIgnoreCase(mediaState) ? "Ⅱ Pause" : "▶ Afspil");
+            playbackButton.setEnabled(ready); playbackButton.setAlpha(ready ? 1f : 0.4f);
+        }
+        if (stopButton != null) { stopButton.setEnabled(ready); stopButton.setAlpha(ready ? 1f : 0.4f); }
+        if (volumeSlider != null) {
+            boolean known = playerVolume >= 0 && SystemClock.elapsedRealtime() - playerVolumeLastSuccess <= 8000;
+            volumeSlider.setEnabled(ready && known); volumeSlider.setAlpha(ready && known ? 1f : 0.4f);
+            if (!volumeDragging) {
+                if (known) volumeSlider.setProgress(playerVolume);
+                volumeLabel.setText(known ? "Volumen " + playerVolume + " %" : "Volumen —");
+            }
+        }
+    }
+    private void reportPlayerCommandError() {
+        if (host != null) host.status("MA-styring mislykkedes. Kontrollér højttalergruppe, forbindelse og tokenets rettigheder.", true);
+    }
+    private void sendPlayerCommand(PartyPlayerControls.Request request, int volume) {
+        if (!playerControlsReady() || io == null) return;
+        readKioskMusicAssistantConfig();
+        final String queue = activeQueue(), entity = nowPlayingEntity;
+        if (queue.isEmpty() || maBaseUrl.isEmpty() || maToken.isEmpty()) return;
+        final long generation = partyGeneration;
+        final String base = maBaseUrl.trim().replaceFirst("^ws:", "http:").replaceFirst("^wss:", "https:").replaceAll("/+$", "");
+        final String token = maToken;
+        if (volume >= 0) playerVolumeRevision++;
+        playerCommandPending = true; updatePlayerControls();
+        io.execute(() -> {
+            boolean accepted = false;
+            try {
+                if (generation == partyGeneration && queue.equals(activeQueue()))
+                    accepted = PartyPlayerControls.accepted(partyRequest(base, token, request.command, request.args));
+            } catch (Throwable ignored) {}
+            final boolean ok = accepted;
+            main.post(() -> {
+                playerCommandPending = false;
+                if (host == null || generation != partyGeneration || !entity.equals(nowPlayingEntity) || !queue.equals(activeQueue())) return;
+                if (ok) {
+                    if (volume >= 0) { playerVolume = volume; playerVolumeLastSuccess = SystemClock.elapsedRealtime(); playerVolumeLastPoll = playerVolumeLastSuccess; }
+                    host.status("MA-højttalergruppen er opdateret.", false); pollMedia();
+                } else reportPlayerCommandError();
+                updatePlayerControls();
+            });
+        });
+    }
+    private void pollPlayerVolume() {
+        if (!partyFullscreen || !showVolume || playerVolumePending || playerCommandPending || io == null) return;
+        long now = SystemClock.elapsedRealtime();
+        if (now - playerVolumeLastPoll < 2000) return;
+        playerVolumeLastPoll = now; readKioskMusicAssistantConfig();
+        final String queue = activeQueue(), entity = nowPlayingEntity;
+        if (queue.isEmpty() || maBaseUrl.isEmpty() || maToken.isEmpty()) return;
+        final long generation = partyGeneration;
+        final long revision = playerVolumeRevision;
+        final String base = maBaseUrl.trim().replaceFirst("^ws:", "http:").replaceFirst("^wss:", "https:").replaceAll("/+$", "");
+        final String token = maToken;
+        playerVolumePending = true;
+        io.execute(() -> {
+            int level = -1;
+            try {
+                Object result = partyRequest(base, token, "players/get", new JSONObject().put("player_id", queue));
+                if (result instanceof JSONObject && queue.equals(((JSONObject) result).optString("player_id", "")))
+                    level = PartyPlayerControls.volume((JSONObject) result);
+            } catch (Throwable ignored) {}
+            final int value = level;
+            main.post(() -> {
+                playerVolumePending = false;
+                if (host == null || !partyFullscreen || generation != partyGeneration || revision != playerVolumeRevision || !entity.equals(nowPlayingEntity) || !queue.equals(activeQueue())) return;
+                playerVolume = value; playerVolumeLastSuccess = value < 0 ? 0 : SystemClock.elapsedRealtime();
+                updatePlayerControls();
+            });
+        });
+    }
     private void removePartyView() {
         if (partyRoot != null && partyRoot.getParent() instanceof ViewGroup) ((ViewGroup) partyRoot.getParent()).removeView(partyRoot);
         partyRoot = null; partyView = null; partyActivity = null;
+        volumeSlider = null; volumeLabel = null; playbackButton = null; stopButton = null; volumeDragging = false; volumeDragQueue = "";
     }
     private void removeStaleViews(Activity activity) {
         if (activity == null) return;
@@ -378,6 +540,7 @@ public final class PartyModePlugin implements KioskPlugin {
     }
     private void updateParty() {
         if (!partyFullscreen || partyView == null) return;
+        updatePlayerControls();
         partyView.setGuests(partyGuestsFollow ? partyQr : null, partyGuestText, partyGuestsFollow ? partyGuestStatus : "");
         if (partyModel == null || SystemClock.elapsedRealtime() - partyLastSuccess > 8000) {
             java.util.List<PartyQueueModel.Track> fallback = new java.util.ArrayList<>();
@@ -437,6 +600,10 @@ public final class PartyModePlugin implements KioskPlugin {
                 .setOnMenuItemClickListener(item -> { changePartyGuestAccess(false); return true; });
         menu.getMenu().add("Vis hele køen").setCheckable(true).setChecked(partyQueueVisible)
                 .setOnMenuItemClickListener(item -> { setPartyQueue(!partyQueueVisible); return true; });
+        menu.getMenu().add("Vis volumen").setCheckable(true).setChecked(showVolume)
+                .setOnMenuItemClickListener(item -> { setPlayerControlsVisible(true, !showVolume); return true; });
+        menu.getMenu().add("Vis afspilningsknapper").setCheckable(true).setChecked(showPlayback)
+                .setOnMenuItemClickListener(item -> { setPlayerControlsVisible(false, !showPlayback); return true; });
         menu.show();
     }
 
