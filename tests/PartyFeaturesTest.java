@@ -16,13 +16,14 @@ public final class PartyFeaturesTest {
         PartyMotion.sample(null, samples, true); check(samples[0] == 0 && samples[1] == 0, "empty audio clears previous samples");
         JSONObject before = queue(8, 2), after = queue(9, 2);
         JSONArray old = items(8), added = items(9);
-        PartyPlayerControls.Request move = PartyPlacement.move(before, old, after, added, 0, 3);
+        PartyPlayerControls.Request move = PartyPlacement.move(before, old, after, added, 0, 3, "spotify://track/same");
         check(move != null && move.args.getString("queue_item_id").equals("id8") && move.args.getInt("pos_shift") == -3, "third future item by stable ID");
-        check(PartyPlacement.move(before, old, after, added, 0, 100).command.isEmpty(), "already last never sends MA's special zero shift");
-        after.put("shuffle_enabled", true); check(PartyPlacement.move(before, old, after, added, 0, 3) == null, "shuffle rejects precise ordering"); after.put("shuffle_enabled", false);
-        after.put("index_in_buffer", 5); check(PartyPlacement.move(before, old, after, added, 0, 3) == null, "buffered position refused"); after.remove("index_in_buffer");
-        added.getJSONObject(0).put("queue_item_id", "changed"); check(PartyPlacement.move(before, old, after, added, 0, 3) == null, "concurrent queue mutation refused"); added = items(9);
-        after.put("current_item", new JSONObject().put("queue_item_id", "different")); check(PartyPlacement.move(before, old, after, added, 0, 3) == null, "track changed while adding");
+        check(PartyPlacement.move(before, old, after, added, 0, 100, "spotify://track/same").command.isEmpty(), "already last never sends MA's special zero shift");
+        check(PartyPlacement.move(before, old, after, added, 0, 3, "spotify://track/other") == null, "concurrent different track never moved");
+        after.put("shuffle_enabled", true); check(PartyPlacement.move(before, old, after, added, 0, 3, "spotify://track/same") == null, "shuffle rejects precise ordering"); after.put("shuffle_enabled", false);
+        after.put("index_in_buffer", 5); check(PartyPlacement.move(before, old, after, added, 0, 3, "spotify://track/same") == null, "buffered position refused"); after.remove("index_in_buffer");
+        added.getJSONObject(0).put("queue_item_id", "changed"); check(PartyPlacement.move(before, old, after, added, 0, 3, "spotify://track/same") == null, "concurrent queue mutation refused"); added = items(9);
+        after.put("current_item", new JSONObject().put("queue_item_id", "different")); check(PartyPlacement.move(before, old, after, added, 0, 3, "spotify://track/same") == null, "track changed while adding");
         JSONArray playlists = new JSONArray().put(new JSONObject().put("uri", "library://playlist/1").put("favorite", true).put("name", "Party"))
                 .put(new JSONObject().put("uri", "library://playlist/2").put("favorite", false).put("name", "Other"));
         check(PartyJukebox.playlists(playlists, "").size() == 1, "only favorites displayed");

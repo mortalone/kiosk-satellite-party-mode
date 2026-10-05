@@ -8,7 +8,7 @@ import java.util.Set;
 /** Refuse ambiguous edits rather than moving another person's queue item. */
 final class PartyPlacement {
     static int tailOffset(JSONObject queue) { return Math.max(0, queue.optInt("items", 0) - 16); }
-    static PartyPlayerControls.Request move(JSONObject before, JSONArray oldTail, JSONObject after, JSONArray newTail, int offset, int position) throws Exception {
+    static PartyPlayerControls.Request move(JSONObject before, JSONArray oldTail, JSONObject after, JSONArray newTail, int offset, int position, String expectedUri) throws Exception {
         if (position < 1 || position > 100 || before.optBoolean("shuffle_enabled") || after.optBoolean("shuffle_enabled")) return null;
         if (!before.optString("queue_id").equals(after.optString("queue_id")) || after.optInt("items") != before.optInt("items") + 1) return null;
         JSONObject oldCurrent = before.optJSONObject("current_item"), current = after.optJSONObject("current_item");
@@ -22,6 +22,9 @@ final class PartyPlacement {
         }
         JSONObject added = newTail.optJSONObject(newTail.length() - 1);
         if (added == null || added.optString("queue_item_id").isEmpty() || ids.contains(added.optString("queue_item_id"))) return null;
+        JSONObject media = added.optJSONObject("media_item");
+        String actualUri = media == null ? added.optString("uri", "") : media.optString("uri", added.optString("uri", ""));
+        if (expectedUri == null || expectedUri.isEmpty() || !expectedUri.equals(actualUri)) return null;
         int source = after.optInt("items") - 1;
         int destination = Math.min(source, after.optInt("current_index", 0) + position);
         if (destination == source) return new PartyPlayerControls.Request("", new JSONObject());

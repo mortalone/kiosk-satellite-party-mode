@@ -709,6 +709,9 @@ public final class PartyModePlugin implements KioskPlugin {
         io.execute(() -> {
             String message = "Nummeret kunne ikke tilføjes."; boolean ok = false, added = false;
             try {
+                Object resolved = partyRequest(base, token, "music/item_by_uri", new JSONObject().put("uri", uri));
+                if (!(resolved instanceof JSONObject) || ((JSONObject)resolved).optString("uri").isEmpty()) throw new IllegalStateException();
+                final String canonicalUri = ((JSONObject)resolved).getString("uri");
                 Object raw = partyRequest(base, token, "player_queues/get", new JSONObject().put("queue_id", queue));
                 if (!(raw instanceof JSONObject) || !queue.equals(((JSONObject)raw).optString("queue_id"))) throw new IllegalStateException();
                 JSONObject before = (JSONObject)raw;
@@ -721,7 +724,7 @@ public final class PartyModePlugin implements KioskPlugin {
                 raw = partyRequest(base, token, "player_queues/get", new JSONObject().put("queue_id", queue));
                 Object tail = partyRequest(base, token, "player_queues/items", new JSONObject().put("queue_id", queue).put("offset", offset).put("limit", 32));
                 if (!(raw instanceof JSONObject) || !(tail instanceof JSONArray) || generation != partyGeneration || !queue.equals(activeQueue())) throw new IllegalStateException();
-                PartyPlayerControls.Request move = PartyPlacement.move(before, (JSONArray)oldTail, (JSONObject)raw, (JSONArray)tail, offset, position);
+                PartyPlayerControls.Request move = PartyPlacement.move(before, (JSONArray)oldTail, (JSONObject)raw, (JSONArray)tail, offset, position, canonicalUri);
                 if (move == null) throw new IllegalStateException();
                 ok = move.command.isEmpty() || PartyPlayerControls.accepted(partyRequest(base, token, move.command, move.args));
                 if (ok) message = "Nummeret er tilføjet på plads " + Math.min(position, Math.max(1, ((JSONObject)raw).optInt("items") - 1 - ((JSONObject)raw).optInt("current_index"))) + " fra nu.";

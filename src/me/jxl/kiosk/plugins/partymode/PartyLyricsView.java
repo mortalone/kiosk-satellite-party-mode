@@ -20,23 +20,30 @@ final class PartyLyricsView extends ScrollView {
         addView(rows, new ScrollView.LayoutParams(-1, -2)); setContentDescription("Sangtekst fra Music Assistant");
     }
     void setLyrics(PartyLyrics value) {
-        if (lyrics == value) return; lyrics = value; selected = -2; rows.removeAllViews(); labels.clear();
+        if (lyrics == value) return; lyrics = value; selected = -2; plainPage = 0; rows.removeAllViews(); labels.clear();
         if (value.lines.isEmpty()) { rows.addView(PartyUi.text(getContext(), "Ingen sangtekst fra Music Assistant endnu", 20, PartyUi.MUTED)); return; }
         if (!value.synced) rows.addView(PartyUi.text(getContext(), "Sangtekst · uden tidskoder", 12, PartyUi.MUTED));
         // Bound native view count; synced songs retain a moving window around the current line.
         renderWindow(value.synced ? 0 : -1);
     }
-    private int windowStart;
+    private int windowStart, plainPage;
     private void renderWindow(int center) {
         rows.removeAllViews(); labels.clear();
         if (!lyrics.synced) rows.addView(PartyUi.text(getContext(), "Sangtekst · uden tidskoder", 12, PartyUi.MUTED));
-        windowStart = lyrics.synced ? Math.max(0, center - 12) : 0;
+        windowStart = lyrics.synced ? Math.max(0, center - 12) : plainPage * 160;
         int end = Math.min(lyrics.lines.size(), windowStart + (lyrics.synced ? 36 : 160));
         for (int i = windowStart; i < end; i++) {
             TextView t = PartyUi.text(getContext(), lyrics.lines.get(i).text.isEmpty() ? "♪" : lyrics.lines.get(i).text, 24, lyrics.synced ? PartyUi.MUTED : PartyUi.INK);
             t.setPadding(0, PartyUi.dp(getContext(), 10), 0, PartyUi.dp(getContext(), 10)); rows.addView(t); labels.add(t);
         }
-        if (!lyrics.synced && end < lyrics.lines.size()) rows.addView(PartyUi.text(getContext(), "Sangteksten er forkortet på denne skærm", 12, PartyUi.MUTED));
+        if (!lyrics.synced && plainPage > 0) {
+            TextView previous = PartyUi.action(getContext(), "← Tidligere linjer", false); rows.addView(previous);
+            previous.setOnClickListener(v -> { plainPage--; renderWindow(-1); scrollTo(0, 0); });
+        }
+        if (!lyrics.synced && end < lyrics.lines.size()) {
+            TextView more = PartyUi.action(getContext(), "Flere linjer →", false); rows.addView(more);
+            more.setOnClickListener(v -> { plainPage++; renderWindow(-1); scrollTo(0, 0); });
+        }
     }
     void updatePosition(double elapsed) {
         int next = lyrics.index(elapsed); if (!lyrics.synced || next == selected) return;
