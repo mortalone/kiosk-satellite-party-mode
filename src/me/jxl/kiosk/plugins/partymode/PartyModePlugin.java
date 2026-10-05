@@ -541,15 +541,19 @@ public final class PartyModePlugin implements KioskPlugin {
     }
     private void dismissSearch() {
         searchGeneration++;
-        if (selectionDialog != null) { selectionDialog.dismiss(); selectionDialog = null; }
-        if (searchDialog != null) { searchDialog.dismiss(); searchDialog = null; }
+        Dialog selection = selectionDialog; selectionDialog = null; if (selection != null) selection.dismiss();
+        Dialog search = searchDialog; searchDialog = null; if (search != null) search.dismiss();
     }
     private String maBase() { return maBaseUrl.trim().replaceFirst("^ws:", "http:").replaceFirst("^wss:", "https:").replaceAll("/+$", ""); }
     private LinearLayout panelBody(Activity a) { LinearLayout body = new LinearLayout(a); body.setOrientation(LinearLayout.VERTICAL); return body; }
     private void openSheet(Activity a, String title, LinearLayout body, boolean drawer) {
-        dismissSearch(); searchDialog = PartyUi.sheet(a, title, body, drawer);
-        searchDialog.setOnDismissListener(dialog -> { searchGeneration++; searchDialog = null; if (selectionDialog != null) { selectionDialog.dismiss(); selectionDialog = null; } });
-        searchDialog.show();
+        dismissSearch(); final Dialog opened = PartyUi.sheet(a, title, body, drawer); searchDialog = opened;
+        opened.setOnDismissListener(dialog -> {
+            if (searchDialog != opened) return;
+            searchGeneration++; searchDialog = null;
+            Dialog selection = selectionDialog; selectionDialog = null; if (selection != null) selection.dismiss();
+        });
+        opened.show();
     }
     private void addPanelAction(LinearLayout rows, String title, boolean selected, Runnable action) {
         TextView choice = PartyUi.action(rows.getContext(), title, selected);
@@ -699,7 +703,8 @@ public final class PartyModePlugin implements KioskPlugin {
         LinearLayout choiceBody = panelBody(a); choiceBody.addView(choiceScroll, new LinearLayout.LayoutParams(-1, 0, 1));
         selectionDialog = PartyUi.sheet(a, playlist ? "Vælg stemning" : "Tilføj til jukebox", choiceBody, false);
         if (selectionDialog.getWindow() != null) selectionDialog.getWindow().setLayout(Math.min(dp(520), a.getResources().getDisplayMetrics().widthPixels - dp(24)), Math.min(dp(560), a.getResources().getDisplayMetrics().heightPixels - dp(64)));
-        selectionDialog.setOnDismissListener(d -> selectionDialog = null); selectionDialog.show();
+        final Dialog opened = selectionDialog;
+        opened.setOnDismissListener(d -> { if (selectionDialog == opened) selectionDialog = null; }); opened.show();
     }
     private void placeTrack(String uri, int position, String queue, long generation) {
         if (!playerControlsReady() || generation != partyGeneration || !queue.equals(activeQueue()) || io == null) return;
