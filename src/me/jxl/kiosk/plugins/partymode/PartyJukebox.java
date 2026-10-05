@@ -26,6 +26,18 @@ final class PartyJukebox {
         }
         return result;
     }
+    static List<Result> playlists(JSONArray items, String base) throws Exception {
+        List<Result> result = new ArrayList<>(); Set<String> seen = new HashSet<>();
+        if (items == null) return result;
+        for (int i = 0; i < items.length() && result.size() < 200; i++) {
+            JSONObject media = items.optJSONObject(i);
+            if (media == null || !media.optBoolean("favorite", false) || !media.optBoolean("available", true)) continue;
+            String uri = media.optString("uri", "");
+            if (!uri.contains("://") || uri.length() > 2048 || !seen.add(uri)) continue;
+            result.add(new Result(uri, PartyQueueModel.track(new JSONObject().put("media_item", media), base, false)));
+        }
+        return result;
+    }
     static PartyPlayerControls.Request playItem(String queue, String id) throws Exception {
         if (queue.isEmpty() || id.isEmpty()) throw new IllegalArgumentException();
         return new PartyPlayerControls.Request("player_queues/play_index", new JSONObject().put("queue_id", queue).put("index", id));

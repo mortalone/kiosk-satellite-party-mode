@@ -13,16 +13,27 @@ final class PartyEffects {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path path = new Path();
     private final RectF rect = new RectF();
-    private final float[] hsv = new float[] {0, 0.88f, 1};
-    private float[] target = new float[0], levels = new float[0], waveform = new float[0];
+    private final int[] palette = new int[256];
+    private float[] target, levels, waveform, cosines, sines;
+    private boolean economy;
+    PartyEffects() {
+        float[] hsv = new float[] {0, 0.88f, 1};
+        for (int i = 0; i < palette.length; i++) { hsv[0] = 165 + i * 185f / 255; palette[i] = Color.HSVToColor(hsv); }
+        setEconomy(false);
+    }
+    void setEconomy(boolean enabled) {
+        economy = enabled; int count = enabled ? 32 : 48;
+        target = new float[count]; levels = new float[count]; waveform = new float[enabled ? 64 : 96];
+        cosines = new float[count]; sines = new float[count];
+        for (int i = 0; i < count; i++) { double angle = Math.PI * 2 * i / count - Math.PI / 2; cosines[i] = (float)Math.cos(angle); sines[i] = (float)Math.sin(angle); }
+    }
+    boolean fresh() { return SystemClock.elapsedRealtime() - lastFrame < 1500; }
     private long lastFrame;
     private int fps = 20;
     private boolean demo;
 
     void accept(float[] bands, float[] wave, int rate, boolean animated) {
-        target = downsample(PartySignal.bounded(bands, false), 48);
-        waveform = downsample(PartySignal.bounded(wave, true), 96);
-        if (levels.length != target.length) levels = new float[target.length];
+        PartyMotion.sample(bands, target, false); PartyMotion.sample(wave, waveform, true);
         lastFrame = SystemClock.elapsedRealtime();
         fps = Math.max(10, Math.min(30, rate)); demo = animated;
     }
@@ -41,15 +52,15 @@ final class PartyEffects {
         }
         if (levels.length == 0) return;
         energy /= levels.length;
-        float time = SystemClock.elapsedRealtime() / 1000f;
+        double time = SystemClock.elapsedRealtime() / 1000.0;
         paint.setStyle(Paint.Style.FILL);
-        if ("spectrum".equals(mode) || "mirror".equals(mode)) {
+        if ("spectrum".equals(mode) || "mirror".equals(mode) || "lyrics".equals(mode)) {
             float cell = width / levels.length;
             boolean mirror = "mirror".equals(mode);
             float baseline = mirror ? height * 0.54f : height * 0.92f;
             for (int i = 0; i < levels.length; i++) {
-                float x = i * cell, amplitude = levels[i] * height * (mirror ? 0.40f : 0.75f);
-                paint.setColor(color(i / (float) levels.length, 215));
+                float x = i * cell, amplitude = levels[i] * height * ("lyrics".equals(mode) ? 0.12f : mirror ? 0.40f : 0.75f);
+                paint.setColor(color(i / (float) levels.length, "lyrics".equals(mode) ? 70 : 215));
                 c.drawRect(x + cell * 0.15f, baseline - amplitude, x + cell * 0.85f, baseline, paint);
                 if (mirror) {
                     paint.setAlpha(85);
@@ -62,11 +73,10 @@ final class PartyEffects {
             paint.setStyle(Paint.Style.STROKE); paint.setStrokeCap(Paint.Cap.ROUND);
             paint.setStrokeWidth(Math.max(2, Math.min(width, height) / 220));
             for (int i = 0; i < levels.length; i++) {
-                double angle = Math.PI * 2 * i / levels.length - Math.PI / 2;
                 float extent = radius + levels[i] * Math.min(width, height) * 0.28f;
                 paint.setColor(color(i / (float) levels.length, 220));
-                c.drawLine(width / 2 + (float) Math.cos(angle) * radius, height / 2 + (float) Math.sin(angle) * radius,
-                        width / 2 + (float) Math.cos(angle) * extent, height / 2 + (float) Math.sin(angle) * extent, paint);
+                c.drawLine(width / 2 + cosines[i] * radius, height / 2 + sines[i] * radius,
+                        width / 2 + cosines[i] * extent, height / 2 + sines[i] * extent, paint);
             }
         } else if ("wave".equals(mode)) {
             paint.setStyle(Paint.Style.STROKE); paint.setStrokeCap(Paint.Cap.ROUND);
@@ -81,9 +91,9 @@ final class PartyEffects {
                 paint.setStrokeWidth(layer == 0 ? 3 : 8); c.drawPath(path, paint);
             }
         } else if ("particles".equals(mode)) {
-            for (int i = 0; i < 48; i++) {
+            for (int i = 0; i < (economy ? 28 : 48); i++) {
                 float strength = levels[i % levels.length];
-                float phase = (time * (0.08f + strength * 0.13f) + i * 0.618034f) % 1;
+                float phase = (float)((time * (0.08f + strength * 0.13f) + i * 0.618034f) % 1);
                 double angle = i * 2.39996 + time * 0.08;
                 float distance = phase * Math.max(width, height) * 0.70f;
                 float x = width / 2 + (float) Math.cos(angle) * distance;
@@ -93,8 +103,8 @@ final class PartyEffects {
             }
         } else if ("tunnel".equals(mode)) {
             paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(2 + energy * 9);
-            for (int ring = 0; ring < 10; ring++) {
-                float phase = (ring / 10f + time * 0.07f) % 1;
+            for (int ring = 0; ring < (economy ? 7 : 10); ring++) {
+                float phase = (float)((ring / 10f + time * 0.07f) % 1);
                 float radius = phase * Math.max(width, height) * 0.7f;
                 paint.setColor(color(ring / 10f, (int) (200 * levels[ring % levels.length] * (1 - phase))));
                 rect.set(width / 2 - radius, height / 2 - radius, width / 2 + radius, height / 2 + radius);
@@ -103,18 +113,8 @@ final class PartyEffects {
         }
         paint.setAlpha(255); paint.setStrokeCap(Paint.Cap.BUTT); paint.setStyle(Paint.Style.FILL);
     }
-    private static float[] downsample(float[] values, int limit) {
-        if (values.length <= limit) return values;
-        float[] result = new float[limit];
-        for (int i = 0; i < limit; i++) {
-            int from = i * values.length / limit, to = (i + 1) * values.length / limit;
-            float sum = 0; for (int j = from; j < to; j++) sum += values[j];
-            result[i] = sum / Math.max(1, to - from);
-        }
-        return result;
-    }
     private int color(float position, int alpha) {
-        hsv[0] = 165 + position * 185;
-        return Color.HSVToColor(Math.max(0, Math.min(255, alpha)), hsv);
+        int index = Math.max(0, Math.min(255, Math.round(position * 255)));
+        return (Math.max(0, Math.min(255, alpha)) << 24) | (palette[index] & 0x00FFFFFF);
     }
 }

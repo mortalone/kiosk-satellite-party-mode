@@ -13,7 +13,7 @@ final class PartySignal {
         return result;
     }
     static String effect(String value) {
-        for (String mode : new String[] {"off", "spectrum", "mirror", "radial", "wave", "particles", "tunnel"})
+        for (String mode : new String[] {"off", "spectrum", "mirror", "radial", "wave", "particles", "tunnel", "lyrics"})
             if (mode.equals(value)) return mode;
         return "off";
     }

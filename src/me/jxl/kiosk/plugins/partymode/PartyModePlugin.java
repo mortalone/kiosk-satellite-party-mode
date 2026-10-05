@@ -2,7 +2,12 @@
 package me.jxl.kiosk.plugins.partymode;
 
 import android.app.Activity;
-import android.app.AlertDialog;
+import android.app.Dialog;
+import android.content.res.ColorStateList;
+import android.graphics.Typeface;
+import android.widget.ImageView;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.ScrollView;
 import android.app.Application;
@@ -60,7 +65,7 @@ public final class PartyModePlugin implements KioskPlugin {
     private Application application;
     private Application.ActivityLifecycleCallbacks lifecycle;
     private Activity currentActivity, partyActivity;
-    private ExecutorService io;
+    private ExecutorService io, artIo;
     private BroadcastReceiver partyAudioReceiver;
     private FrameLayout partyRoot;
     private PartyView partyView;
@@ -71,7 +76,10 @@ public final class PartyModePlugin implements KioskPlugin {
     private long playerVolumeLastPoll, playerVolumeLastSuccess;
     private long playerVolumeRevision;
     private SeekBar volumeSlider;
-    private TextView volumeLabel, playbackButton, stopButton;
+    private TextView volumeLabel;
+    private ImageView playbackButton, stopButton, volumeMinus, volumePlus;
+    private String volumeStyle = "Buttons";
+    private boolean showPlaylists = true;
     private String volumeDragQueue = "";
     private String nowPlayingEntity = "", visibilityEntity = "", visibilityCondition = "Always", visibilityValue = "", visibilityState = "";
     private String mediaState = "", mediaIdentity = "";
@@ -82,9 +90,23 @@ public final class PartyModePlugin implements KioskPlugin {
     private String partyEffect = "off";
     private boolean partyGuestsFollow = true, partyQueueVisible = true;
     private int gain = 3, fps = 20;
+    private boolean settingFpsEconomy;
     private boolean allowSearch = true, allowQueueTap, showQuickActions, showEqControls, eqPending;
     private int tracksBefore = 2, tracksAfter = 2;
-    private AlertDialog searchDialog;
+    private Dialog searchDialog, selectionDialog;
+    private PartyLyricsView lyricsView;
+    private JSONObject partyTrackMedia;
+    private PartyLyrics lyrics = PartyLyrics.parse("", "");
+    private String lyricsTrack = "", lyricsContent = "";
+    private boolean lyricsPending;
+    private long lyricsLastPoll, lyricsGeneration;
+    private final Runnable lyricTick = new Runnable() {
+        @Override public void run() {
+            if (host == null || !partyFullscreen || !"lyrics".equals(partyEffect) || lyricsView == null) return;
+            lyricsView.updatePosition(partyView == null ? estimatedMediaPosition() : partyView.elapsedSeconds());
+            main.postDelayed(this, 250);
+        }
+    };
     private long searchGeneration;
     private String reportedGuestStatus = "";
     private boolean partyPollPending, partyGuestPending, partyGuestChangePending;
@@ -104,7 +126,7 @@ public final class PartyModePlugin implements KioskPlugin {
             pollMedia(); pollVisibility();
             updatePresentation();
             if (partyFullscreen) {
-                updateParty(); pollPartyQueue(); pollPartyGuests(); pollPlayerVolume();
+                updateParty(); pollPartyQueue(); pollPartyGuests(); pollPlayerVolume(); pollPartyLyrics();
                 publishPresentation();
                 if (activeKioskActivity() != null && SystemClock.elapsedRealtime() - partyLastPostpone > 15000) {
                     partyLastPostpone = SystemClock.elapsedRealtime(); partyHostCommand("postponeScreensaver");
@@ -117,7 +139,7 @@ public final class PartyModePlugin implements KioskPlugin {
     @Override public synchronized void start(PluginHost host, Map<String, Object> settings) {
         this.host = host; context = applicationContext(host);
         if (context == null) { host.status("Android application context unavailable.", true); return; }
-        io = Executors.newFixedThreadPool(3);
+        io = Executors.newFixedThreadPool(3); artIo = Executors.newFixedThreadPool(2);
         main.post(() -> {
             registerLifecycle(); registerPartyAudioReceiver();
             currentActivity = findResumedActivity();
@@ -146,7 +168,7 @@ public final class PartyModePlugin implements KioskPlugin {
         String speaker = setting(settings, "speakerEntity", "");
         if (!speaker.equals(nowPlayingEntity)) {
             partyGeneration++; partyModel = null; partyTarget = ""; partyLastSuccess = 0;
-            mediaAttributes = Collections.emptyMap(); mediaState = ""; mediaIdentity = ""; lastPosition = Double.NaN;
+            resetTrackLyrics(); mediaAttributes = Collections.emptyMap(); mediaState = ""; mediaIdentity = ""; lastPosition = Double.NaN;
             playerVolume = -1; playerVolumeLastSuccess = 0; playerVolumeLastPoll = 0;
             clearPartyGuests();
         }
@@ -157,7 +179,8 @@ public final class PartyModePlugin implements KioskPlugin {
         allowSearch = !Boolean.FALSE.equals(settings.get("allowSearch"));
         allowQueueTap = Boolean.TRUE.equals(settings.get("allowQueueTap"));
         showQuickActions = Boolean.TRUE.equals(settings.get("showQuickActions"));
-        showEqControls = Boolean.TRUE.equals(settings.get("showEqControls"));
+        String extra = setting(settings, "extraControls", Boolean.TRUE.equals(settings.get("showEqControls")) ? "Playlists and EQ" : "Playlists");
+        showEqControls = extra.contains("EQ"); showPlaylists = extra.contains("Playlists");
         nowPlayingEntity = speaker;
         automatic = Boolean.TRUE.equals(settings.get("startAutomatically"));
         onlyPlaying = Boolean.TRUE.equals(settings.get("onlyWhilePlaying"));
@@ -168,10 +191,15 @@ public final class PartyModePlugin implements KioskPlugin {
         gain = intSetting(settings, "gain", 3, 1, 10);
         try { fps = Integer.parseInt(setting(settings, "refreshRate", "20 FPS").split(" ")[0]); } catch (Exception ignored) { fps = 20; }
         fps = Math.max(10, Math.min(30, fps));
+        settingFpsEconomy = setting(settings, "refreshRate", "20 FPS").contains("Eco");
         SharedPreferences prefs = context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE);
         partyEffect = PartySignal.effect(savedChoice(prefs, "effect", setting(settings, "effect", "off")));
-        screenControls = savedChoice(prefs, "controls", setting(settings, "screenControls", "All controls"));
-        showVolume = Boolean.parseBoolean(savedChoice(prefs, "volume_visible", String.valueOf(!Boolean.FALSE.equals(settings.get("showVolume")))));
+        screenControls = savedChoice(prefs, "controls", normalizeControls(setting(settings, "screenControls", "Menu only")));
+        String configuredVolume = setting(settings, "volumeControls", "Buttons");
+        if (!prefs.contains("configured_volume_style") && "Buttons".equals(configuredVolume) &&
+                (Boolean.FALSE.equals(settings.get("showVolume")) || "false".equals(prefs.getString("configured_volume_visible", "true")))) configuredVolume = "Off";
+        volumeStyle = savedChoice(prefs, "volume_style", configuredVolume);
+        showVolume = Boolean.parseBoolean(savedChoice(prefs, "volume_visible", String.valueOf(!"Off".equals(configuredVolume))));
         showPlayback = Boolean.parseBoolean(savedChoice(prefs, "playback_visible", String.valueOf(!Boolean.FALSE.equals(settings.get("showPlaybackControls")))));
         partyQueueVisible = Boolean.parseBoolean(prefs.getString("queue_visible", "true"));
         partyGuestsFollow = Boolean.parseBoolean(savedChoice(prefs, "guests_follow", String.valueOf(!Boolean.FALSE.equals(settings.get("showGuestQr")))));
@@ -206,7 +234,7 @@ public final class PartyModePlugin implements KioskPlugin {
             else if ("volumeToggle".equals(command)) setPlayerControlsVisible(true, !showVolume);
             else if ("playbackToggle".equals(command)) setPlayerControlsVisible(false, !showPlayback);
             else if ("controlsAll".equals(command) || "controlsClose".equals(command) || "controlsHidden".equals(command)) {
-                screenControls = "controlsAll".equals(command) ? "All controls" : "controlsClose".equals(command) ? "Close only" : "Hidden";
+                screenControls = "controlsAll".equals(command) ? "Menu and Close" : "controlsClose".equals(command) ? "Close only" : "Hidden";
                 context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit().putString("controls", screenControls).apply();
                 removePartyView(); updatePresentation();
             } else host.status("Unknown Party command: " + command, true);
@@ -239,7 +267,7 @@ public final class PartyModePlugin implements KioskPlugin {
         };
         if (Looper.myLooper() == Looper.getMainLooper()) cleanup.run();
         else { main.post(cleanup); try { done.await(2, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); } }
-        if (io != null) io.shutdownNow(); io = null; host = null;
+        if (io != null) io.shutdownNow(); if (artIo != null) artIo.shutdownNow(); io = null; artIo = null; host = null;
     }
 
     private void pollMedia() {
@@ -266,6 +294,7 @@ public final class PartyModePlugin implements KioskPlugin {
     }
     private void applyMedia(String state, Map<?, ?> attrs) {
         String identity = attr(attrs, "media_content_id", attr(attrs, "media_title", ""));
+        if (!identity.equals(mediaIdentity)) resetTrackLyrics();
         double position = numberAttr(attrs, "media_position", 0);
         if (!identity.equals(mediaIdentity) || !state.equals(mediaState) || Double.isNaN(lastPosition) || Math.abs(position - lastPosition) >= 0.5) {
             positionAnchor = "paused".equals(state) && identity.equals(mediaIdentity) && position == lastPosition ? estimatedMediaPosition() : position;
@@ -273,7 +302,7 @@ public final class PartyModePlugin implements KioskPlugin {
         }
         if (!attr(attrs, "active_queue", "").equals(attr(mediaAttributes, "active_queue", ""))) {
             partyGeneration++; partyModel = null; partyTarget = ""; partyLastSuccess = 0;
-            dismissSearch(); clearPartyGuests(); partyGuestLastPoll = 0;
+            resetTrackLyrics(); dismissSearch(); clearPartyGuests(); partyGuestLastPoll = 0;
             playerVolume = -1; playerVolumeLastSuccess = 0; playerVolumeLastPoll = 0;
         }
         mediaIdentity = identity; lastPosition = position; mediaState = state; mediaAttributes = attrs;
@@ -327,29 +356,42 @@ public final class PartyModePlugin implements KioskPlugin {
             v.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(), insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
             return insets;
         });
-        partyView = new PartyView(activity, true); partyView.setPresentation(partyEffect, partyQueueVisible);
+        partyView = new PartyView(activity, true); partyView.setEconomy(settingFpsEconomy); partyView.setPresentation(partyEffect, partyQueueVisible);
         partyView.setTrackAction(allowQueueTap ? this::playQueueTrack : null);
         FrameLayout.LayoutParams body = new FrameLayout.LayoutParams(-1, -1);
-        body.topMargin = "Hidden".equals(screenControls) && !allowSearch ? 0 : dp(70);
-        body.bottomMargin = dp((showPlayback ? 64 : 0) + (showVolume ? 64 : 0));
+        body.topMargin = "Hidden".equals(screenControls) && !allowSearch && !showPlaylists ? 0 : dp(70);
+        body.bottomMargin = dp((showPlayback ? 60 : 0) + (showVolume ? 60 : 0));
         root.addView(partyView, body);
-        if (!"Hidden".equals(screenControls)) {
-            TextView close = button(activity, "×", "Afslut Party Mode");
+        if ("Menu and Close".equals(screenControls) || "Close only".equals(screenControls)) {
+            ImageView close = PartyUi.icon(activity, "close", "Afslut Party Mode");
             FrameLayout.LayoutParams cp = new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.TOP | Gravity.RIGHT);
             cp.topMargin = dp(10); cp.rightMargin = dp(12); root.addView(close, cp);
             close.setOnClickListener(v -> { activation.hide(); closePresentation(); });
-            if ("All controls".equals(screenControls)) {
-                TextView menu = button(activity, "Indstillinger", "Party-indstillinger og visualiseringer");
-                FrameLayout.LayoutParams mp = new FrameLayout.LayoutParams(dp(156), dp(48), Gravity.TOP | Gravity.RIGHT);
-                mp.topMargin = dp(10); mp.rightMargin = dp(70); root.addView(menu, mp);
-                menu.setOnClickListener(v -> showPartyMenu(menu));
-            }
+        }
+        if (menuVisible()) {
+            ImageView menu = PartyUi.icon(activity, "settings", "Party-indstillinger og visualiseringer");
+            FrameLayout.LayoutParams mp = new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.TOP | Gravity.RIGHT);
+            mp.topMargin = dp(10); mp.rightMargin = dp("Menu and Close".equals(screenControls) ? 68 : 12);
+            root.addView(menu, mp); menu.setOnClickListener(v -> showPartyMenu(menu));
         }
         if (allowSearch) {
-            TextView search = button(activity, "Søg", "Søg efter musik i Music Assistant");
-            FrameLayout.LayoutParams sp = new FrameLayout.LayoutParams(dp(96), dp(48), Gravity.TOP | Gravity.LEFT);
+            ImageView search = PartyUi.icon(activity, "search", "Søg efter musik i Music Assistant");
+            FrameLayout.LayoutParams sp = new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.TOP | Gravity.LEFT);
             sp.topMargin = dp(10); sp.leftMargin = dp(12); root.addView(search, sp);
             search.setOnClickListener(v -> showSearch());
+        }
+        if (showPlaylists) {
+            ImageView playlists = PartyUi.icon(activity, "playlist", "Favoritplaylister fra Music Assistant");
+            FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.TOP | Gravity.LEFT);
+            pp.topMargin = dp(10); pp.leftMargin = dp(allowSearch ? 68 : 12); root.addView(playlists, pp);
+            playlists.setOnClickListener(v -> showPlaylists());
+        }
+        if ("lyrics".equals(partyEffect)) {
+            lyricsView = new PartyLyricsView(activity);
+            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-1, -1);
+            lp.topMargin = body.topMargin; lp.bottomMargin = body.bottomMargin + dp(116);
+            root.addView(lyricsView, lp); lyricsView.setLyrics(lyrics);
+            main.removeCallbacks(lyricTick); main.post(lyricTick);
         }
         addPlayerControls(root, activity);
         ((FrameLayout) content).addView(root, new FrameLayout.LayoutParams(-1, -1));
@@ -357,11 +399,10 @@ public final class PartyModePlugin implements KioskPlugin {
         partyRoot = root; partyActivity = activity;
         updatePlayerControls();
     }
+    private static String normalizeControls(String value) { return "All controls".equals(value) ? "Menu only" : value; }
+    private boolean menuVisible() { return "Menu only".equals(screenControls) || "Menu and Close".equals(screenControls); }
     private TextView button(Activity activity, String title, String description) {
-        TextView view = new TextView(activity); view.setText(title); view.setTextColor(Color.WHITE); view.setTextSize("×".equals(title) ? 28 : 16);
-        view.setGravity(Gravity.CENTER); view.setContentDescription(description);
-        GradientDrawable bg = new GradientDrawable(); bg.setColor(0xDD353539); bg.setCornerRadius(dp(24)); view.setBackground(bg);
-        return view;
+        TextView view = PartyUi.action(activity, title, false); view.setContentDescription(description); return view;
     }
     private void setPlayerControlsVisible(boolean volume, boolean visible) {
         if (volume) showVolume = visible; else showPlayback = visible;
@@ -379,12 +420,12 @@ public final class PartyModePlugin implements KioskPlugin {
     }
     private void addPlayerControls(FrameLayout root, Activity activity) {
         if (showPlayback) {
-            LinearLayout row = playerControlRow(activity);
-            playbackButton = button(activity, "▶ Afspil", "Afspil eller pause den valgte MA-kø");
-            stopButton = button(activity, "■ Stop", "Stop den valgte MA-kø");
-            for (TextView view : new TextView[] {playbackButton, stopButton}) {
-                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(48), 1);
-                params.leftMargin = dp(4); params.rightMargin = dp(4); row.addView(view, params);
+            LinearLayout row = playerControlRow(activity); row.setGravity(Gravity.CENTER);
+            playbackButton = PartyUi.icon(activity, "play", "Afspil eller pause den valgte MA-kø");
+            stopButton = PartyUi.icon(activity, "stop", "Stop den valgte MA-kø");
+            for (ImageView view : new ImageView[] {playbackButton, stopButton}) {
+                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(48), dp(48));
+                params.leftMargin = dp(6); params.rightMargin = dp(6); row.addView(view, params);
             }
             playbackButton.setOnClickListener(v -> {
                 try { sendPlayerCommand(PartyPlayerControls.playback(activeQueue(), "playing".equalsIgnoreCase(mediaState)), -1); }
@@ -394,36 +435,46 @@ public final class PartyModePlugin implements KioskPlugin {
                 try { sendPlayerCommand(PartyPlayerControls.stop(activeQueue()), -1); }
                 catch (Exception error) { reportPlayerCommandError(); }
             });
-            FrameLayout.LayoutParams layout = new FrameLayout.LayoutParams(-1, dp(56), Gravity.BOTTOM);
-            layout.leftMargin = dp(12); layout.rightMargin = dp(12); layout.bottomMargin = dp(8);
-            root.addView(row, layout);
+            FrameLayout.LayoutParams layout = new FrameLayout.LayoutParams(dp(144), dp(56), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            layout.bottomMargin = dp(8); root.addView(row, layout);
         }
         if (showVolume) {
-            LinearLayout row = playerControlRow(activity);
-            volumeLabel = new TextView(activity); volumeLabel.setTextColor(Color.WHITE); volumeLabel.setTextSize(14);
-            volumeLabel.setGravity(Gravity.CENTER); volumeLabel.setMaxLines(2);
-            row.addView(volumeLabel, new LinearLayout.LayoutParams(dp(98), -1));
-            volumeSlider = new SeekBar(activity); volumeSlider.setMax(100);
-            volumeSlider.setContentDescription("Højttalergruppens volumen");
-            row.addView(volumeSlider, new LinearLayout.LayoutParams(0, dp(48), 1));
-            volumeSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-                @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
-                    if (fromUser && volumeLabel != null) volumeLabel.setText("Volumen " + progress + " %");
-                }
-                @Override public void onStartTrackingTouch(SeekBar bar) {
-                    volumeDragging = true; volumeDragQueue = activeQueue();
-                }
-                @Override public void onStopTrackingTouch(SeekBar bar) {
-                    String queue = volumeDragQueue; volumeDragging = false; volumeDragQueue = "";
-                    if (!queue.equals(activeQueue()) || queue.isEmpty()) { updatePlayerControls(); return; }
-                    try { sendPlayerCommand(PartyPlayerControls.volume(queue, bar.getProgress()), bar.getProgress()); }
-                    catch (Exception error) { reportPlayerCommandError(); }
-                }
-            });
-            FrameLayout.LayoutParams layout = new FrameLayout.LayoutParams(-1, dp(56), Gravity.BOTTOM);
-            layout.leftMargin = dp(12); layout.rightMargin = dp(12); layout.bottomMargin = dp(showPlayback ? 72 : 8);
-            root.addView(row, layout);
+            LinearLayout row = playerControlRow(activity); row.setGravity(Gravity.CENTER_VERTICAL);
+            volumeLabel = PartyUi.text(activity, "—", 15, PartyUi.INK); volumeLabel.setGravity(Gravity.CENTER);
+            if (!"Slider".equals(volumeStyle)) {
+                volumeMinus = PartyUi.icon(activity, "minus", "Skru ned for højttalergruppen");
+                volumePlus = PartyUi.icon(activity, "plus", "Skru op for højttalergruppen");
+                row.addView(volumeMinus, new LinearLayout.LayoutParams(dp(48), dp(48)));
+                row.addView(volumeLabel, new LinearLayout.LayoutParams(dp(72), dp(48)));
+                row.addView(volumePlus, new LinearLayout.LayoutParams(dp(48), dp(48)));
+                volumeMinus.setOnClickListener(v -> stepVolume(-3)); volumePlus.setOnClickListener(v -> stepVolume(3));
+            } else {
+                row.addView(volumeLabel, new LinearLayout.LayoutParams(dp(62), dp(48)));
+                volumeSlider = new SeekBar(activity); volumeSlider.setMax(100);
+                volumeSlider.setProgressTintList(ColorStateList.valueOf(PartyUi.ACCENT));
+                volumeSlider.setThumbTintList(ColorStateList.valueOf(PartyUi.ACCENT));
+                volumeSlider.setProgressBackgroundTintList(ColorStateList.valueOf(0xFF3B4857));
+                volumeSlider.setContentDescription("Højttalergruppens volumen");
+                row.addView(volumeSlider, new LinearLayout.LayoutParams(0, dp(48), 1));
+                volumeSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                    @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) { if (fromUser && volumeLabel != null) volumeLabel.setText(progress + "%"); }
+                    @Override public void onStartTrackingTouch(SeekBar bar) { volumeDragging = true; volumeDragQueue = activeQueue(); }
+                    @Override public void onStopTrackingTouch(SeekBar bar) {
+                        String queue = volumeDragQueue; volumeDragging = false; volumeDragQueue = "";
+                        if (!queue.equals(activeQueue()) || queue.isEmpty()) { updatePlayerControls(); return; }
+                        try { sendPlayerCommand(PartyPlayerControls.volume(queue, bar.getProgress()), bar.getProgress()); }
+                        catch (Exception error) { reportPlayerCommandError(); }
+                    }
+                });
+            }
+            FrameLayout.LayoutParams layout = new FrameLayout.LayoutParams(dp("Slider".equals(volumeStyle) ? 286 : 180), dp(56), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            layout.bottomMargin = dp(showPlayback ? 68 : 8); root.addView(row, layout);
         }
+    }
+    private void stepVolume(int delta) {
+        if (!playerControlsReady() || playerVolume < 0 || SystemClock.elapsedRealtime() - playerVolumeLastSuccess > 8000) return;
+        try { sendPlayerCommand(PartyPlayerControls.volume(activeQueue(), playerVolume + delta), Math.max(0, Math.min(100, playerVolume + delta))); }
+        catch (Exception error) { reportPlayerCommandError(); }
     }
     private String activeQueue() { return attr(mediaAttributes, "active_queue", "").trim(); }
     private boolean playerControlsReady() {
@@ -434,18 +485,19 @@ public final class PartyModePlugin implements KioskPlugin {
     private void updatePlayerControls() {
         boolean ready = playerControlsReady();
         if (playbackButton != null) {
-            playbackButton.setText("playing".equalsIgnoreCase(mediaState) ? "Ⅱ Pause" : "▶ Afspil");
+            playbackButton.setImageDrawable(new PartyUi.Glyph("playing".equalsIgnoreCase(mediaState) ? "pause" : "play"));
             playbackButton.setEnabled(ready); playbackButton.setAlpha(ready ? 1f : 0.4f);
         }
         if (stopButton != null) { stopButton.setEnabled(ready); stopButton.setAlpha(ready ? 1f : 0.4f); }
-        if (volumeSlider != null) {
-            boolean known = playerVolume >= 0 && SystemClock.elapsedRealtime() - playerVolumeLastSuccess <= 8000;
-            volumeSlider.setEnabled(ready && known); volumeSlider.setAlpha(ready && known ? 1f : 0.4f);
-            if (!volumeDragging) {
-                if (known) volumeSlider.setProgress(playerVolume);
-                volumeLabel.setText(known ? "Volumen " + playerVolume + " %" : "Volumen —");
-            }
+        boolean known = playerVolume >= 0 && SystemClock.elapsedRealtime() - playerVolumeLastSuccess <= 8000;
+        for (ImageView control : new ImageView[] {volumeMinus, volumePlus}) if (control != null) {
+            control.setEnabled(ready && known); control.setAlpha(ready && known ? 1f : 0.4f);
         }
+        if (volumeSlider != null) {
+            volumeSlider.setEnabled(ready && known); volumeSlider.setAlpha(ready && known ? 1f : 0.4f);
+            if (!volumeDragging && known) volumeSlider.setProgress(playerVolume);
+        }
+        if (volumeLabel != null && !volumeDragging) volumeLabel.setText(known ? playerVolume + "%" : "—");
     }
     private void reportPlayerCommandError() {
         if (host != null) host.status("MA-styring mislykkedes. Kontrollér højttalergruppe, forbindelse og tokenets rettigheder.", true);
@@ -489,31 +541,47 @@ public final class PartyModePlugin implements KioskPlugin {
     }
     private void dismissSearch() {
         searchGeneration++;
+        if (selectionDialog != null) { selectionDialog.dismiss(); selectionDialog = null; }
         if (searchDialog != null) { searchDialog.dismiss(); searchDialog = null; }
+    }
+    private String maBase() { return maBaseUrl.trim().replaceFirst("^ws:", "http:").replaceFirst("^wss:", "https:").replaceAll("/+$", ""); }
+    private LinearLayout panelBody(Activity a) { LinearLayout body = new LinearLayout(a); body.setOrientation(LinearLayout.VERTICAL); return body; }
+    private void openSheet(Activity a, String title, LinearLayout body, boolean drawer) {
+        dismissSearch(); searchDialog = PartyUi.sheet(a, title, body, drawer);
+        searchDialog.setOnDismissListener(dialog -> { searchGeneration++; searchDialog = null; if (selectionDialog != null) { selectionDialog.dismiss(); selectionDialog = null; } });
+        searchDialog.show();
+    }
+    private void addPanelAction(LinearLayout rows, String title, boolean selected, Runnable action) {
+        TextView choice = PartyUi.action(rows.getContext(), title, selected);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2); lp.bottomMargin = dp(8); rows.addView(choice, lp);
+        choice.setOnClickListener(v -> action.run());
+    }
+    private void panelHeading(LinearLayout rows, String title) {
+        TextView t = PartyUi.text(rows.getContext(), title, 12, PartyUi.MUTED); t.setPadding(dp(4), dp(16), 0, dp(10)); rows.addView(t);
     }
     private void showSearch() {
         Activity activity = activeKioskActivity();
         if (!allowSearch || !playerControlsReady() || activity == null) return;
-        dismissSearch();
         final String queue = activeQueue(); final long generation = partyGeneration;
-        LinearLayout layout = new LinearLayout(activity); layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(dp(16), dp(8), dp(16), dp(8));
-        EditText input = new EditText(activity); input.setSingleLine(true); input.setHint("Titel eller kunstner");
-        layout.addView(input, new LinearLayout.LayoutParams(-1, dp(54)));
-        TextView submit = button(activity, "Søg i Music Assistant", "Søg efter tracks");
-        layout.addView(submit, new LinearLayout.LayoutParams(-1, dp(48)));
-        ScrollView scroll = new ScrollView(activity);
-        LinearLayout results = new LinearLayout(activity); results.setOrientation(LinearLayout.VERTICAL);
-        scroll.addView(results); layout.addView(scroll, new LinearLayout.LayoutParams(-1, dp(300)));
-        searchDialog = new AlertDialog.Builder(activity).setTitle("Jukebox · søg musik").setView(layout)
-                .setNegativeButton("Luk", null).create();
-        searchDialog.setOnDismissListener(dialog -> { searchGeneration++; searchDialog = null; });
-        submit.setOnClickListener(v -> {
+        LinearLayout layout = panelBody(activity);
+        LinearLayout field = new LinearLayout(activity); field.setGravity(Gravity.CENTER_VERTICAL);
+        field.setBackground(PartyUi.shape(activity, 0xFF222C38, 18, true));
+        EditText input = new EditText(activity); input.setSingleLine(true); input.setTextColor(PartyUi.INK); input.setHintTextColor(PartyUi.MUTED);
+        input.setTextSize(17); input.setHint("Titel eller kunstner"); input.setBackgroundColor(Color.TRANSPARENT);
+        input.setPadding(dp(14), 0, dp(4), 0); input.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
+        field.addView(input, new LinearLayout.LayoutParams(0, dp(56), 1));
+        ImageView submit = PartyUi.icon(activity, "search", "Søg i Music Assistant"); field.addView(submit, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        LinearLayout.LayoutParams fl = new LinearLayout.LayoutParams(-1, dp(56)); fl.bottomMargin = dp(16); layout.addView(field, fl);
+        ScrollView scroll = new ScrollView(activity); scroll.setVerticalScrollBarEnabled(false);
+        LinearLayout results = panelBody(activity); scroll.addView(results); layout.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        TextView status = PartyUi.text(activity, "Find et nummer til jukeboxen", 15, PartyUi.MUTED); results.addView(status);
+        openSheet(activity, "Find musik", layout, false);
+        Runnable search = () -> {
             String query = input.getText().toString().trim(); if (query.isEmpty() || query.length() > 256 || io == null) return;
-            final long request = ++searchGeneration;
-            final String base = maBaseUrl.trim().replaceFirst("^ws:", "http:").replaceFirst("^wss:", "https:").replaceAll("/+$", "");
-            final String token = maToken; results.removeAllViews();
-            TextView status = new TextView(activity); status.setText("Søger…"); results.addView(status);
+            InputMethodManager keyboard = (InputMethodManager) activity.getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (keyboard != null) keyboard.hideSoftInputFromWindow(input.getWindowToken(), 0);
+            input.clearFocus(); final long request = ++searchGeneration;
+            final String base = maBase(), token = maToken; results.removeAllViews(); status.setText("Søger…"); results.addView(status);
             io.execute(() -> {
                 java.util.List<PartyJukebox.Result> found = null;
                 try {
@@ -523,30 +591,172 @@ public final class PartyModePlugin implements KioskPlugin {
                 } catch (Throwable ignored) {}
                 final java.util.List<PartyJukebox.Result> matches = found;
                 main.post(() -> {
-                    if (host == null || !allowSearch || searchDialog == null || request != searchGeneration ||
-                            generation != partyGeneration || !queue.equals(activeQueue())) return;
+                    if (!validPanel(queue, generation, request) || !allowSearch) return;
                     results.removeAllViews();
                     if (matches == null || matches.isEmpty()) {
-                        status.setText(matches == null ? "Søgning mislykkedes. Kontrollér MA-forbindelsen." : "Ingen numre fundet");
-                        results.addView(status); return;
+                        status.setText(matches == null ? "Søgning mislykkedes. Kontrollér MA-forbindelsen." : "Ingen numre fundet"); results.addView(status); return;
                     }
-                    for (PartyJukebox.Result match : matches) {
-                        TextView row = new TextView(activity); row.setText(match.track.title + "\n" + match.track.artist);
-                        row.setTextSize(16); row.setPadding(dp(8), dp(12), dp(8), dp(12)); results.addView(row);
-                        row.setOnClickListener(clicked -> {
-                            if (!allowSearch || generation != partyGeneration || !queue.equals(activeQueue())) return;
-                            new AlertDialog.Builder(activity).setTitle(match.track.title)
-                                    .setItems(new String[]{"Læg i køen", "Afspil nu"}, (dialog, which) -> {
-                                        if (!allowSearch || generation != partyGeneration || !queue.equals(activeQueue())) return;
-                                        try { sendPlayerCommand(PartyJukebox.enqueue(queue, match.uri, which == 1), -1); }
-                                        catch (Exception error) { reportPlayerCommandError(); }
-                                    }).setNegativeButton("Annullér", null).show();
-                        });
-                    }
+                    for (PartyJukebox.Result match : matches) addMediaRow(activity, results, match, request, queue, generation,
+                            () -> { if (allowSearch) chooseMedia(activity, match, false, queue, generation); });
                 });
             });
+        };
+        submit.setOnClickListener(v -> search.run()); input.setOnEditorActionListener((v, action, event) -> { if (action == EditorInfo.IME_ACTION_SEARCH) { search.run(); return true; } return false; });
+    }
+    private boolean validPanel(String queue, long generation, long request) {
+        return host != null && partyFullscreen && searchDialog != null && request == searchGeneration && generation == partyGeneration && queue.equals(activeQueue());
+    }
+    private void addMediaRow(Activity a, LinearLayout rows, PartyJukebox.Result media, long request, String queue, long generation, Runnable action) {
+        LinearLayout row = new LinearLayout(a); row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(dp(8), dp(8), dp(12), dp(8));
+        row.setBackground(new android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(0x3365E5CF), PartyUi.shape(a, 0xFF202A35, 16, false), null));
+        ImageView cover = new ImageView(a); cover.setScaleType(ImageView.ScaleType.CENTER_CROP); cover.setImageDrawable(new PartyUi.Glyph("playlist"));
+        cover.setBackground(PartyUi.shape(a, 0xFF344252, 12, false)); cover.setClipToOutline(true);
+        row.addView(cover, new LinearLayout.LayoutParams(dp(56), dp(56)));
+        LinearLayout labels = panelBody(a); labels.setPadding(dp(12), 0, 0, 0);
+        TextView name = PartyUi.text(a, media.track.title, 16, PartyUi.INK); name.setTypeface(Typeface.DEFAULT_BOLD); name.setMaxLines(2); name.setEllipsize(android.text.TextUtils.TruncateAt.END); labels.addView(name);
+        if (!media.track.artist.isEmpty()) { TextView artist = PartyUi.text(a, media.track.artist, 13, PartyUi.MUTED); artist.setSingleLine(true); artist.setEllipsize(android.text.TextUtils.TruncateAt.END); labels.addView(artist); }
+        row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2); lp.bottomMargin = dp(8); rows.addView(row, lp);
+        row.setOnClickListener(v -> { if (validPanel(queue, generation, request)) action.run(); });
+        if (!media.track.artwork.isEmpty() && artIo != null) {
+            artIo.execute(() -> {
+                Bitmap image = fetchPartyBitmap(media.track.artwork);
+                if (image != null && Math.max(image.getWidth(), image.getHeight()) > 160) {
+                    float scale = 160f / Math.max(image.getWidth(), image.getHeight());
+                    image = Bitmap.createScaledBitmap(image, Math.max(1, Math.round(image.getWidth() * scale)), Math.max(1, Math.round(image.getHeight() * scale)), true);
+                }
+                final Bitmap result = image;
+                main.post(() -> { if (result != null && validPanel(queue, generation, request)) cover.setImageBitmap(result); });
+            });
+        }
+    }
+    private void showPlaylists() {
+        Activity a = activeKioskActivity(); if (!showPlaylists || !playerControlsReady() || a == null || io == null) return;
+        LinearLayout body = panelBody(a); ScrollView scroll = new ScrollView(a); scroll.setVerticalScrollBarEnabled(false);
+        LinearLayout rows = panelBody(a); scroll.addView(rows); body.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        TextView message = PartyUi.text(a, "Henter favoritplaylister…", 15, PartyUi.MUTED); rows.addView(message);
+        openSheet(a, "Favoritplaylister", body, true);
+        final long request = ++searchGeneration, generation = partyGeneration;
+        final String queue = activeQueue(), base = maBase(), token = maToken;
+        io.execute(() -> {
+            java.util.List<PartyJukebox.Result> favorites = null;
+            try {
+                Object response = partyRequest(base, token, "music/playlists/library_items", new JSONObject().put("favorite", true).put("limit", 200).put("offset", 0).put("order_by", "sort_name"));
+                if (response instanceof JSONArray) favorites = PartyJukebox.playlists((JSONArray) response, base);
+            } catch (Throwable ignored) {}
+            final java.util.List<PartyJukebox.Result> items = favorites;
+            main.post(() -> {
+                if (!validPanel(queue, generation, request) || !showPlaylists) return;
+                rows.removeAllViews();
+                if (items == null || items.isEmpty()) {
+                    message.setText(items == null ? "Playlister kunne ikke hentes fra MA." : "Markér dine begivenheds-playlister som favoritter i Music Assistant. De vises her næste gang du åbner panelet."); rows.addView(message); return;
+                }
+                for (PartyJukebox.Result item : items) addMediaRow(a, rows, item, request, queue, generation,
+                        () -> { if (showPlaylists) chooseMedia(a, item, true, queue, generation); });
+            });
         });
-        searchDialog.show();
+    }
+    private void chooseMedia(Activity a, PartyJukebox.Result media, boolean playlist, String queue, long generation) {
+        if (!playerControlsReady() || generation != partyGeneration || !queue.equals(activeQueue())) return;
+        if (selectionDialog != null) selectionDialog.dismiss();
+        LinearLayout body = panelBody(a);
+        TextView title = PartyUi.text(a, media.track.title, 20, PartyUi.INK); title.setTypeface(Typeface.DEFAULT_BOLD); body.addView(title);
+        if (playlist) {
+            panelHeading(body, "PLAYLISTE");
+            addPanelAction(body, "Start playliste · erstat køen", false, () -> {
+                if (!showPlaylists || generation != partyGeneration || !queue.equals(activeQueue())) return;
+                try { sendPlayerCommand(new PartyPlayerControls.Request("player_queues/play_media", new JSONObject().put("queue_id", queue).put("media", media.uri).put("option", "replace")), -1); }
+                catch (Exception error) { reportPlayerCommandError(); }
+                if (selectionDialog != null) selectionDialog.dismiss(); dismissSearch();
+            });
+            addPanelAction(body, "Læg hele playlisten sidst i køen", false, () -> { if (showPlaylists) { placeTrack(media.uri, -1, queue, generation); if (selectionDialog != null) selectionDialog.dismiss(); } });
+        } else {
+            panelHeading(body, "PLACERING I KØEN");
+            EditText position = new EditText(a); position.setTextColor(PartyUi.INK); position.setHintTextColor(PartyUi.MUTED); position.setSingleLine(true);
+            position.setInputType(android.text.InputType.TYPE_CLASS_NUMBER); position.setHint("Tomt = sidst i køen");
+            position.setPadding(dp(14), 0, dp(14), 0); position.setBackground(PartyUi.shape(a, 0xFF222C38, 16, true));
+            int saved = context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).getInt("add_position", -1);
+            if (saved >= 0) position.setText(String.valueOf(saved));
+            LinearLayout chips = new LinearLayout(a);
+            String[] names = {"Nu", "Næste", "Nr. 3", "Sidst"}; int[] values = {0, 1, 3, -1};
+            for (int i = 0; i < names.length; i++) {
+                final int value = values[i]; TextView chip = PartyUi.action(a, names[i], saved == value); chip.setGravity(Gravity.CENTER); chip.setPadding(0, 0, 0, 0); chip.setTextSize(13);
+                LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(0, dp(48), 1); cp.rightMargin = dp(4); chips.addView(chip, cp);
+                chip.setOnClickListener(v -> { position.setText(value < 0 ? "" : String.valueOf(value)); for (int j = 0; j < chips.getChildCount(); j++) ((TextView)chips.getChildAt(j)).setTextColor(chips.getChildAt(j) == chip ? PartyUi.ACCENT : PartyUi.INK); });
+            }
+            body.addView(chips); LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(-1, dp(52)); pp.topMargin = dp(12); pp.bottomMargin = dp(12); body.addView(position, pp);
+            TextView hint = PartyUi.text(a, "0 = afspil nu · 1 = næste · 3 = tredje nummer fra nu", 13, PartyUi.MUTED); body.addView(hint);
+            panelHeading(body, "");
+            addPanelAction(body, "Tilføj nummer", true, () -> {
+                if (!allowSearch || generation != partyGeneration || !queue.equals(activeQueue())) return;
+                int number = -1; try { if (!position.getText().toString().trim().isEmpty()) number = Integer.parseInt(position.getText().toString().trim()); } catch (Exception error) { position.setError("Vælg 0–100 eller tomt for sidst"); return; }
+                if (number < -1 || number > 100) { position.setError("Vælg 0–100 eller tomt for sidst"); return; }
+                context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit().putInt("add_position", number).apply();
+                placeTrack(media.uri, number, queue, generation); if (selectionDialog != null) selectionDialog.dismiss();
+            });
+        }
+        selectionDialog = PartyUi.sheet(a, playlist ? "Vælg stemning" : "Tilføj til jukebox", body, false);
+        if (selectionDialog.getWindow() != null) selectionDialog.getWindow().setLayout(Math.min(dp(520), a.getResources().getDisplayMetrics().widthPixels - dp(24)), Math.min(dp(470), a.getResources().getDisplayMetrics().heightPixels - dp(64)));
+        selectionDialog.setOnDismissListener(d -> selectionDialog = null); selectionDialog.show();
+    }
+    private void placeTrack(String uri, int position, String queue, long generation) {
+        if (!playerControlsReady() || generation != partyGeneration || !queue.equals(activeQueue()) || io == null) return;
+        if (position <= 0) { try { sendPlayerCommand(PartyJukebox.enqueue(queue, uri, position == 0), -1); } catch (Exception error) { reportPlayerCommandError(); } return; }
+        final String base = maBase(), token = maToken;
+        playerCommandPending = true; updatePlayerControls();
+        io.execute(() -> {
+            String message = "Nummeret kunne ikke tilføjes."; boolean ok = false, added = false;
+            try {
+                Object raw = partyRequest(base, token, "player_queues/get", new JSONObject().put("queue_id", queue));
+                if (!(raw instanceof JSONObject) || !queue.equals(((JSONObject)raw).optString("queue_id"))) throw new IllegalStateException();
+                JSONObject before = (JSONObject)raw;
+                if (before.optBoolean("shuffle_enabled")) { message = "Slå shuffle fra i MA for at vælge en præcis køplacering."; throw new IllegalStateException(); }
+                int offset = PartyPlacement.tailOffset(before);
+                Object oldTail = partyRequest(base, token, "player_queues/items", new JSONObject().put("queue_id", queue).put("offset", offset).put("limit", 32));
+                if (!(oldTail instanceof JSONArray) || generation != partyGeneration || !queue.equals(activeQueue())) throw new IllegalStateException();
+                PartyPlayerControls.Request add = PartyJukebox.enqueue(queue, uri, false);
+                added = PartyPlayerControls.accepted(partyRequest(base, token, add.command, add.args)); if (!added) throw new IllegalStateException();
+                raw = partyRequest(base, token, "player_queues/get", new JSONObject().put("queue_id", queue));
+                Object tail = partyRequest(base, token, "player_queues/items", new JSONObject().put("queue_id", queue).put("offset", offset).put("limit", 32));
+                if (!(raw instanceof JSONObject) || !(tail instanceof JSONArray) || generation != partyGeneration || !queue.equals(activeQueue())) throw new IllegalStateException();
+                PartyPlayerControls.Request move = PartyPlacement.move(before, (JSONArray)oldTail, (JSONObject)raw, (JSONArray)tail, offset, position);
+                if (move == null) throw new IllegalStateException();
+                ok = move.command.isEmpty() || PartyPlayerControls.accepted(partyRequest(base, token, move.command, move.args));
+                if (ok) message = "Nummeret er tilføjet på plads " + Math.min(position, Math.max(1, ((JSONObject)raw).optInt("items") - 1 - ((JSONObject)raw).optInt("current_index"))) + " fra nu.";
+            } catch (Throwable ignored) { if (added) message = "Nummeret er tilføjet sidst; køen ændrede sig, eller placeringen er allerede bufferet. Det er ikke flyttet."; }
+            final boolean success = ok; final String status = message;
+            main.post(() -> { playerCommandPending = false; if (host != null) { host.status(status, !success); android.widget.Toast.makeText(context, status, android.widget.Toast.LENGTH_LONG).show(); pollMedia(); partyLastPoll = 0; pollPartyQueue(); updatePlayerControls(); } });
+        });
+    }
+    private void resetTrackLyrics() {
+        partyTrackMedia = null; lyricsTrack = ""; lyricsContent = ""; lyricsGeneration++; lyricsLastPoll = 0;
+        lyrics = PartyLyrics.parse("", ""); if (lyricsView != null) lyricsView.setLyrics(lyrics);
+    }
+    private void applyTrackLyrics() {
+        String identity = partyTrackMedia == null ? "" : partyTrackMedia.optString("uri", partyTrackMedia.optString("provider") + ":" + partyTrackMedia.optString("item_id"));
+        if (!identity.equals(lyricsTrack)) { lyricsTrack = identity; lyricsGeneration++; lyricsLastPoll = 0; lyrics = PartyLyrics.parse("", ""); lyricsContent = ""; }
+        JSONObject metadata = partyTrackMedia == null ? null : partyTrackMedia.optJSONObject("metadata");
+        String content = metadata == null ? "" : metadata.optString("lrc_lyrics", "") + "\u0000" + metadata.optString("lyrics", "");
+        if (!content.equals(lyricsContent)) { lyricsContent = content; PartyLyrics available = PartyLyrics.fromMedia(partyTrackMedia); if (!available.lines.isEmpty()) lyrics = available; }
+        if (lyricsView != null) lyricsView.setLyrics(lyrics);
+    }
+    private void pollPartyLyrics() {
+        if (!partyFullscreen || !"lyrics".equals(partyEffect) || lyricsPending || io == null || partyTrackMedia == null || !lyrics.lines.isEmpty()) return;
+        long now = SystemClock.elapsedRealtime(); if (now - lyricsLastPoll < 30000) return; lyricsLastPoll = now;
+        final String id = partyTrackMedia.optString("item_id", ""), provider = partyTrackMedia.optString("provider", "");
+        if (id.isEmpty() || provider.isEmpty()) return;
+        final String base = maBase(), token = maToken; final long generation = lyricsGeneration, queueGeneration = partyGeneration;
+        lyricsPending = true;
+        io.execute(() -> {
+            PartyLyrics value = null;
+            try { Object media = partyRequest(base, token, "music/tracks/get", new JSONObject().put("item_id", id).put("provider_instance_id_or_domain", provider));
+                if (media instanceof JSONObject) value = PartyLyrics.fromMedia((JSONObject)media);
+            } catch (Throwable ignored) {}
+            final PartyLyrics found = value;
+            main.post(() -> { lyricsPending = false; if (host == null || generation != lyricsGeneration || queueGeneration != partyGeneration) return;
+                if (found != null && !found.lines.isEmpty()) { lyrics = found; if (lyricsView != null) lyricsView.setLyrics(lyrics); }
+            });
+        });
     }
     private void changeEq(boolean restore) {
         if (!showEqControls || !playerControlsReady() || eqPending || io == null) return;
@@ -633,8 +843,8 @@ public final class PartyModePlugin implements KioskPlugin {
     }
     private void removePartyView() {
         if (partyRoot != null && partyRoot.getParent() instanceof ViewGroup) ((ViewGroup) partyRoot.getParent()).removeView(partyRoot);
-        partyRoot = null; partyView = null; partyActivity = null;
-        volumeSlider = null; volumeLabel = null; playbackButton = null; stopButton = null; volumeDragging = false; volumeDragQueue = "";
+        partyRoot = null; partyView = null; partyActivity = null; lyricsView = null; main.removeCallbacks(lyricTick);
+        volumeSlider = null; volumeLabel = null; playbackButton = null; stopButton = null; volumeMinus = null; volumePlus = null; volumeDragging = false; volumeDragQueue = "";
     }
     private void removeStaleViews(Activity activity) {
         if (activity == null) return;
@@ -673,8 +883,7 @@ public final class PartyModePlugin implements KioskPlugin {
     private void setPartyEffect(String effect) {
         partyEffect = PartySignal.effect(effect);
         context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit().putString("effect", partyEffect).apply();
-        if (partyView != null) partyView.setPresentation(partyEffect, partyQueueVisible);
-        if (partyFullscreen) publishPresentation();
+        if (partyFullscreen) { removePartyView(); ensurePartyView(); publishPresentation(); pollPartyLyrics(); }
     }
     private void setPartyGuests(boolean follow) {
         partyGuestsFollow = follow;
@@ -735,34 +944,35 @@ public final class PartyModePlugin implements KioskPlugin {
     }
 
     private void showPartyMenu(View anchor) {
-        android.widget.PopupMenu menu = new android.widget.PopupMenu(anchor.getContext(), anchor);
-        String[] ids = {"off", "spectrum", "mirror", "radial", "wave", "particles", "tunnel"};
-        String[] names = {"Ingen visualisering", "Neon Spectrum", "Mirror Spectrum", "Radial Pulse", "Waveform", "Star Particles", "Neon Tunnel"};
+        Activity a = activeKioskActivity(); if (a == null || !menuVisible()) return;
+        LinearLayout body = panelBody(a), rows = panelBody(a); ScrollView scroll = new ScrollView(a);
+        scroll.setVerticalScrollBarEnabled(false); scroll.addView(rows); body.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        panelHeading(rows, "VISUALISERING");
+        String[] ids = {"off", "spectrum", "mirror", "radial", "wave", "particles", "tunnel", "lyrics"};
+        String[] names = {"Ingen visualisering", "Neon Spectrum", "Mirror Spectrum", "Radial Pulse", "Waveform", "Star Particles", "Neon Tunnel", "Lyrics · syng med"};
         for (int i = 0; i < ids.length; i++) {
-            final String effect = ids[i];
-            menu.getMenu().add(1, i + 1, i, names[i]).setCheckable(true).setChecked(effect.equals(partyEffect))
-                    .setOnMenuItemClickListener(item -> { setPartyEffect(effect); return true; });
+            final String effect = ids[i]; addPanelAction(rows, names[i], effect.equals(partyEffect), () -> { setPartyEffect(effect); showPartyMenu(anchor); });
         }
-        menu.getMenu().setGroupCheckable(1, true, true);
-        menu.getMenu().add("Vis gæste-QR fra Music Assistant").setCheckable(true).setChecked(partyGuestsFollow)
-                .setOnMenuItemClickListener(item -> { setPartyGuests(!partyGuestsFollow); return true; });
-        menu.getMenu().add("Aktivér gæsteadgang i Music Assistant")
-                .setOnMenuItemClickListener(item -> { changePartyGuestAccess(true); return true; });
-        menu.getMenu().add("Deaktivér gæsteadgang i Music Assistant")
-                .setOnMenuItemClickListener(item -> { changePartyGuestAccess(false); return true; });
-        menu.getMenu().add("Vis hele køen").setCheckable(true).setChecked(partyQueueVisible)
-                .setOnMenuItemClickListener(item -> { setPartyQueue(!partyQueueVisible); return true; });
-        menu.getMenu().add("Vis volumen").setCheckable(true).setChecked(showVolume)
-                .setOnMenuItemClickListener(item -> { setPlayerControlsVisible(true, !showVolume); return true; });
-        menu.getMenu().add("Vis afspilningsknapper").setCheckable(true).setChecked(showPlayback)
-                .setOnMenuItemClickListener(item -> { setPlayerControlsVisible(false, !showPlayback); return true; });
+        panelHeading(rows, "SKÆRM");
+        addPanelAction(rows, "Hele køen", partyQueueVisible, () -> { setPartyQueue(!partyQueueVisible); showPartyMenu(anchor); });
+        addPanelAction(rows, "Vis volumen", showVolume, () -> { setPlayerControlsVisible(true, !showVolume); showPartyMenu(anchor); });
+        addPanelAction(rows, "Volumen · −/+ knapper", "Buttons".equals(volumeStyle), () -> { volumeStyle = "Buttons"; context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit().putString("volume_style", volumeStyle).apply(); setPlayerControlsVisible(true, true); showPartyMenu(anchor); });
+        addPanelAction(rows, "Volumen · slider", "Slider".equals(volumeStyle), () -> { volumeStyle = "Slider"; context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit().putString("volume_style", volumeStyle).apply(); setPlayerControlsVisible(true, true); showPartyMenu(anchor); });
+        addPanelAction(rows, "Vis afspilningsknapper", showPlayback, () -> { setPlayerControlsVisible(false, !showPlayback); showPartyMenu(anchor); });
+        panelHeading(rows, "GÆSTER");
+        addPanelAction(rows, "Vis gæste-QR", partyGuestsFollow, () -> { setPartyGuests(!partyGuestsFollow); showPartyMenu(anchor); });
+        addPanelAction(rows, "Aktivér gæsteadgang i MA", false, () -> changePartyGuestAccess(true));
+        addPanelAction(rows, "Deaktivér gæsteadgang i MA", false, () -> changePartyGuestAccess(false));
         if (showEqControls) {
-            menu.getMenu().add("Lyd: Party Punch").setOnMenuItemClickListener(item -> { changeEq(false); return true; });
-            menu.getMenu().add("Lyd: Gendan oprindelig EQ").setOnMenuItemClickListener(item -> { changeEq(true); return true; });
+            panelHeading(rows, "LYD");
+            addPanelAction(rows, "Party Punch", false, () -> changeEq(false));
+            addPanelAction(rows, "Gendan oprindelig EQ", false, () -> changeEq(true));
         }
-        menu.show();
+        panelHeading(rows, "GRAFIK");
+        rows.addView(PartyUi.text(a, (partyView != null && partyView.hardwareCanvas() ? "Hardware-accelereret Canvas" : "Software-Canvas / endnu ikke målt") +
+                " · " + fps + " FPS" + (settingFpsEconomy ? " · Eco" : "") + "\nEco kan vælges i pluginets backend.", 12, PartyUi.MUTED));
+        openSheet(a, "Party-indstillinger", body, false);
     }
-
     private void clearPartyGuests() {
         final long generation = ++partyGuestGeneration;
         partyGuestUrl = ""; partyQr = null; partyGuestLastSuccess = 0;
@@ -908,14 +1118,15 @@ public final class PartyModePlugin implements KioskPlugin {
         final String base = maBaseUrl.trim().replaceFirst("^ws:", "http:").replaceFirst("^wss:", "https:").replaceAll("/+$", "");
         final String token = maToken;
         partyPollPending = true;
-        final int before = tracksBefore, after = tracksAfter;
+        final int before = tracksBefore, after = tracksAfter; final String mediaAtRequest = mediaIdentity;
         io.execute(() -> {
-            PartyQueueModel model = null;
+            PartyQueueModel model = null; JSONObject media = null;
             try {
                 JSONObject args = new JSONObject(); args.put("queue_id", queueId);
                 Object result = partyRequest(base, token, "player_queues/get", args);
                 if (result instanceof JSONObject && queueId.equals(((JSONObject) result).optString("queue_id", ""))) {
                     JSONObject queue = (JSONObject) result;
+                    JSONObject current = queue.optJSONObject("current_item"); media = current == null ? null : current.optJSONObject("media_item");
                     JSONArray items = null;
                     try {
                         JSONObject itemArgs = new JSONObject();
@@ -926,12 +1137,13 @@ public final class PartyModePlugin implements KioskPlugin {
                     model = PartyQueueModel.parse(queue, items, base, before, after);
                 }
             } catch (Throwable ignored) {}
-            final PartyQueueModel snapshot = model;
+            final PartyQueueModel snapshot = model; final JSONObject trackMedia = media;
             main.post(() -> {
                 partyPollPending = false;
-                if (host == null || generation != partyGeneration || !entity.equals(nowPlayingEntity) ||
+                if (host == null || generation != partyGeneration || !mediaAtRequest.equals(mediaIdentity) || !entity.equals(nowPlayingEntity) ||
                         !queueId.equals(attr(mediaAttributes, "active_queue", ""))) return;
                 if (snapshot != null) {
+                    partyTrackMedia = trackMedia; applyTrackLyrics();
                     partyModel = snapshot; partyLastSuccess = SystemClock.elapsedRealtime();
                     fetchPartyArtwork(snapshot);
                 }
@@ -971,13 +1183,13 @@ public final class PartyModePlugin implements KioskPlugin {
     }
 
     private void fetchPartyArtwork(PartyQueueModel model) {
-        if (io == null) return;
+        if (artIo == null) return;
         for (PartyQueueModel.Track track : model.tracks) {
             String path = track.artwork;
             if (path.isEmpty() || partyArtwork.containsKey(path) || !partyArtworkPending.add(path)) continue;
             final String resolved = resolveHaUrl(path);
             final long generation = partyGeneration;
-            io.execute(() -> {
+            artIo.execute(() -> {
                 Bitmap cover = resolved == null ? null : fetchPartyBitmap(resolved);
                 main.post(() -> {
                     partyArtworkPending.remove(path);

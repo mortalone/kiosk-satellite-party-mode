@@ -7,10 +7,10 @@ A standalone full-screen plugin with its own settings, Home Assistant actions an
 1. Connect Music Assistant in Kiosk Satellite so its URL and token are available.
 2. Select the group's **Music Assistant HA media_player** in **Speaker / højttaler**. Party follows that entity's `active_queue`; it does not select an output or change speaker volume.
 3. Enable Party Mode and use **Start Party Mode**. Alternatively enable **Start automatically when visibility allows** and configure Party's own visibility. Automatic start defaults off so installing the plugin does not immediately cover the settings screen.
-4. Choose screen controls: **All controls**, **Close only**, or **Hidden**. All controls shows a labeled **Indstillinger** menu beside Close at the top. This setting affects only those two buttons. **Show volume** and **Show playback controls** independently enable the bottom volume slider and Play/Pause + Stop. Both are on by default. Home Assistant actions work in every mode.
+4. **Menu and Close buttons** defaults to **Menu only**, so the Close icon stays hidden. Choose Menu and Close, Close only, or Hidden if desired. Search and favorites have their own permissions. **Volume controls** selects Off, compact −/+ Buttons (default), or a slim Slider. **Show playback controls** independently enables Play/Pause and Stop. HA actions work in all modes.
 5. For audio effects, enable Spectrum Visualizer **0.2.11+** as the audio analyzer. Its existing source/capture settings determine audio input. Party owns its effect, gain and FPS; it hides the normal spectrum overlay while Party is displayed. Choosing `off` requires no audio capture.
 
-The bottom buttons operate the selected MA queue. The volume slider uses MA group volume for that queue’s speaker/group, never Kiosk’s master volume. It shows the actual MA group volume and sends a change when the slider is released. Missing queue/connection or unknown volume disables the affected control. The MA token needs queue-control and player read/control permissions. Volume and visualization gain remain separate.
+The bottom buttons operate the selected MA queue. The volume controls use MA group volume for that queue’s speaker/group, never Kiosk’s master volume. It shows the actual MA group volume and send a change with each −/+ tap (3 percentage points), or when the slider is released. Missing queue/connection or unknown volume disables the affected control. The MA token needs queue-control and player read/control permissions. Volume and visualization gain remain separate.
 
 ## Independent visibility
 
@@ -44,7 +44,7 @@ Add this full repository URL in Kiosk Satellite's Plugin Manager:
 
 https://github.com/mortalone/kiosk-satellite-party-mode
 
-Use Party Mode 0.1.3+, Now Playing 0.2.4+, Spectrum Visualizer 0.2.11+ and Quick Actions 0.2.7+. The companions retain their own visibility when Party closes. Update Now Playing to remove the old full-screen Party actions, then enable this plugin and select the intended MA speaker group.
+Use Party Mode 0.1.4+, Now Playing 0.2.4+, Spectrum Visualizer 0.2.11+ and Quick Actions 0.2.7+. The companions retain their own visibility when Party closes. Update Now Playing to remove the old full-screen Party actions, then enable this plugin and select the intended MA speaker group.
 
 ```sh
 python3 tools/build.py --android-platform 35
@@ -58,7 +58,7 @@ CI also extracts the actual release ZIP using Kiosk Satellite’s pinned SDK 1 i
 - **Allow queue tracks to play on tap** is off by default. Turn it on to start previous/upcoming songs immediately by stable queue item ID. Current song is not a jump target. Queue actions require a fresh queue snapshot.
 - **Tracks before current / Tracks after current** each accept 0–10. Lists scroll instead of shrinking text. Set both to 0 for current song only. Existing HA full-queue/current-song actions still work.
 - **Show Quick Actions above Party** is off by default; requires Quick Actions 0.2.7+. Its action-specific visibility rules remain active. This switch permits the rail during Party even without a screensaver.
-- **Show EQ choices in screen menu** is off by default. Enable it with Menu and Close = All controls for Party Punch / Restore original EQ.
+- EQ choices are off by default; select **EQ** or **Playlists and EQ** in **Playlist and EQ controls**. Enable it with Menu only or Menu and Close for Party Punch / Restore original EQ.
 - For a locked guest screen: hide Menu/Close, search, queue tapping, volume, playback buttons, EQ, and Quick Actions independently. HA start/stop and visibility remain available.
 - The old Show full queue backend switch is replaced by the two track counts. Saved current-song/full-queue actions remain supported. MA guest setup instructions appear in plugin status, never over the music.
 
@@ -70,4 +70,18 @@ MA requires an **admin token** to save DSP. Individual DSP is supported for Sono
 
 ### Rendering
 
-The queue, artwork, and QR code are cached as a static layer. Audio updates and animation share one bounded frame scheduler, while playback progress runs at 1 Hz without an effect. Effects use up to 48 spectrum bars, 96 waveform samples, 48 particles, and 10 tunnel rings. Paused playback has no continuous animation loop. The existing 10/20/30 FPS choice remains available; start with 10 FPS on a slower Pi. Performance must be checked on the actual kiosk device.
+The queue, artwork, and QR code use a retained native drawing layer. Audio updates and animation share one bounded frame scheduler, while playback progress runs at 1 Hz without an effect. Effects use up to 48 spectrum bars, 96 waveform samples, 48 particles, and 10 tunnel rings. Paused playback has no continuous animation loop. The existing 10/20/30 FPS choice remains available; start with 10 FPS on a slower Pi. Performance must be checked on the actual kiosk device.
+
+## Modern panels, lyrics and event playlists (0.1.4)
+
+Search uses a drawn magnifying-glass icon, a dark rounded field, cover thumbnails and readable title/artist rows. Settings uses the same dark native sheet instead of the old platform popup. Previous/upcoming cards progressively narrow with their distance from the current song.
+
+**Adding a track:** choose Now (0), Next (1), No. 3, another position 0–100, or End (blank). The last choice is remembered. Positive positions are relative to the currently playing song. If the queue is shorter, the track goes at the end. For exact placement the plugin appends one track, identifies its new stable queue ID, verifies the queue's tail/current song, then moves only that item. Shuffle, buffered destinations and concurrent edits prevent an exact move; a track already added remains at the end and a message explains this. Positions never replace the entire queue. Favorite playlist activation separately offers **Start playlist · replace queue** or **Add whole playlist at end**.
+
+**Favorite playlists:** select Playlists or Playlists and EQ in **Playlist and EQ controls**. A playlist icon opens an animated side panel; the panel is closed by default. It reads up to 200 available favorite library playlists from MA each time it opens. Mark/unmark favorites in MA to change the selection without editing this plugin.
+
+**Lyrics:** choose `lyrics` in Visualization or **Lyrics · syng med** in the on-screen settings. MA's `lrc_lyrics` follows the current queue's timeline and highlights/scrolls the current line. Plain lyrics can be read manually; no timings are invented. A subdued spectrum plays underneath when Visualizer is available; text also works without the audio analyzer. Missing lyrics do not trigger direct third-party requests. Enable/check MA's lyrics metadata providers (e.g. LRCLIB) and refresh the track's metadata in MA if necessary. First metadata lookup can be delayed. Guest QR is hidden in lyrics layout to preserve text space.
+
+**Graphics:** the queue/QR uses a separate native View, so Android can retain its display list while the animated background updates. The full-screen CPU bitmap cache is removed. The background is preblended, spectrum/waveform buffers are reused, colors/radial directions are precalculated, and frames align with Android's animation scheduling. `10 FPS Eco` / `20 FPS Eco` use 32 bands, 64 waveform samples, 28 particles or 7 rings. Settings reports whether the actual drawing Canvas is hardware accelerated. The plugin follows the host's graphics pipeline; it cannot supply a missing Pi Android GPU driver. Emulator smoke tests validate native main/search/placement/favorites/settings/lyrics panels with mock MA, not actual Pi frame rates or live MA playback.
+
+Backend compatibility: the original All controls choice migrates to Menu only to hide Close by default. Existing HA controlsAll explicitly selects Menu and Close. Volume visibility actions remain independent of its Buttons/Slider style. Playlist/EQ access shares one select with all four combinations to stay within Kiosk SDK 1's 20-setting limit.
