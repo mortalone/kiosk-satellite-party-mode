@@ -3,7 +3,7 @@
   "apiVersion": 1,
   "id": "party-mode",
   "name": "Party Mode",
-  "version": "0.1.6",
+  "version": "0.1.3",
   "minAndroidSdk": 26,
   "entryClass": "me.jxl.kiosk.plugins.partymode.PartyModePlugin",
   "description": "Standalone full-screen Party queue, MA guest QR and native audio visualizations, with independent visibility and HA actions.",
@@ -86,29 +86,22 @@
       "key": "screenControls",
       "type": "select",
       "title": "Menu and Close buttons",
-      "default": "Menu only",
+      "default": "All controls",
       "options": [
-        "Menu only",
-        "Menu and Close",
+        "All controls",
         "Close only",
-        "Hidden",
-        "All controls"
+        "Hidden"
       ],
       "group": "Presentation",
-      "description": "Menu only is the default: no Close icon. All controls is retained for upgrades and also becomes Menu only. Search and playlists have separate permissions. HA actions always work."
+      "description": "Controls only the Settings and Close buttons. Volume and playback buttons have independent visibility settings. HA actions always work."
     },
     {
-      "key": "volumeControls",
-      "type": "select",
-      "title": "Volume controls",
-      "default": "Buttons",
+      "key": "showVolume",
+      "type": "boolean",
+      "title": "Show volume",
+      "default": true,
       "group": "Presentation",
-      "description": "Compact −/+ controls by default, or a slim tinted slider. Independent of playback controls and visualization gain.",
-      "options": [
-        "Off",
-        "Buttons",
-        "Slider"
-      ]
+      "description": "Show the MA speaker/group volume slider in full-screen Party. Independent of playback buttons and the Settings/Close buttons. Changes speaker volume, not visualization gain."
     },
     {
       "key": "showPlaybackControls",
@@ -130,11 +123,10 @@
         "radial",
         "wave",
         "particles",
-        "tunnel",
-        "lyrics"
+        "tunnel"
       ],
       "group": "Presentation",
-      "description": "None / Neon Spectrum / Mirror Spectrum / Radial Pulse / Waveform / Star Particles / Neon Tunnel. Actions can save another choice. Lyrics follows MA song text, synchronized when timecodes exist."
+      "description": "None / Neon Spectrum / Mirror Spectrum / Radial Pulse / Waveform / Star Particles / Neon Tunnel. Actions can save another choice."
     },
     {
       "key": "gain",
@@ -155,12 +147,10 @@
       "options": [
         "10 FPS",
         "20 FPS",
-        "30 FPS",
-        "10 FPS Eco",
-        "20 FPS Eco"
+        "30 FPS"
       ],
       "group": "Presentation",
-      "description": "Party rendering and audio-frame rate. Independent of the normal spectrum overlay. Eco uses fewer bars, particles and waveform samples."
+      "description": "Party rendering and audio-frame rate. Independent of the normal spectrum overlay."
     },
     {
       "key": "showGuestQr",
@@ -195,18 +185,12 @@
       "description": "Requires Quick Actions 0.2.7+. Each action keeps its own visibility conditions."
     },
     {
-      "key": "extraControls",
-      "type": "select",
-      "title": "Playlist and EQ controls",
-      "default": "Playlists",
+      "key": "showEqControls",
+      "type": "boolean",
+      "title": "Show EQ choices in screen menu",
+      "default": false,
       "group": "Jukebox",
-      "description": "Favorites open in a collapsed drawer. EQ choices require the settings menu, an MA admin token and supported Sonos DSP playback.",
-      "options": [
-        "None",
-        "Playlists",
-        "EQ",
-        "Playlists and EQ"
-      ]
+      "description": "Party Punch and Restore original EQ. MA admin token and DSP-supported Sonos playback required; changes persist until restored."
     },
     {
       "key": "tracksBefore",
@@ -294,7 +278,7 @@
     },
     {
       "id": "controlsAll",
-      "title": "Screen controls: Menu and Close (saved)"
+      "title": "Screen controls: Settings and Close (saved)"
     },
     {
       "id": "controlsClose",

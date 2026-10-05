@@ -5,6 +5,8 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import java.util.zip.ZipEntry
 import me.jxl.kiosk_satellite.plugins.PluginPackage
+import me.jxl.kiosk_satellite.plugins.PluginManifest
+import org.json.JSONObject
 
 /** Validate the real release ZIP with Kiosk's pinned installer, without running plugin code. */
 fun main(args: Array<String>) {
@@ -16,6 +18,7 @@ fun main(args: Array<String>) {
         val installed = PluginPackage.extract(archive.readBytes(), destination)
         PluginPackage.verifyManifest(installed, manifest)
         check(installed.id == "party-mode")
+        verifyUpgradeSettings(installed, PluginManifest(JSONObject(File(args[2]).readText())))
         val license = File(destination, "LICENSE").readText()
         check("Project Nayuki" in license && "Permission is hereby granted" in license) {
             "Bundled QR library license is missing from the accepted LICENSE file"
@@ -47,4 +50,44 @@ fun main(args: Array<String>) {
     } finally {
         root.deleteRecursively()
     }
+}
+
+/** Match PluginBridge.install: retain only declared keys, then validate saved values. */
+private fun verifyUpgradeSettings(current: PluginManifest, previous: PluginManifest) {
+    val retained = (0 until current.settings.length()).map {
+        current.settings.getJSONObject(it).getString("key")
+    }.toSet()
+    fun upgrade(values: JSONObject): Map<String, Any> {
+        val overrides = JSONObject()
+        for (key in retained) if (values.has(key)) overrides.put(key, values.get(key))
+        return current.config(overrides)
+    }
+    val saved = JSONObject(previous.config(JSONObject()))
+    val baseline = upgrade(saved)
+    check(baseline["screenControls"] == "All controls")
+    check(current.config(JSONObject())["screenControls"] == "Menu only")
+    for (i in 0 until previous.settings.length()) {
+        val setting = previous.settings.getJSONObject(i)
+        val key = setting.getString("key")
+        if (setting.getString("type") != "select") continue
+        val options = setting.getJSONArray("options")
+        for (j in 0 until options.length()) {
+            val value = options.getString(j)
+            val migrated = upgrade(JSONObject(saved.toString()).put(key, value))
+            if (key in retained) check(migrated[key] == value) { "Upgrade lost $key=$value" }
+        }
+    }
+    // Prove this catches the exact 0.1.5 failure before plugin.configure can run.
+    val broken = JSONObject(current.json.toString())
+    val settings = broken.getJSONArray("settings")
+    for (i in 0 until settings.length()) {
+        val setting = settings.getJSONObject(i)
+        if (setting.getString("key") == "screenControls") {
+            val options = setting.getJSONArray("options")
+            for (j in options.length() - 1 downTo 0) if (options.getString(j) == "All controls") options.remove(j)
+        }
+    }
+    val failure = runCatching { PluginManifest(broken).config(JSONObject().put("screenControls", "All controls")) }.exceptionOrNull()
+    check(failure?.message == "Unknown selection option")
+    println("Saved 0.1.3 settings and every old selection option accepted during upgrade")
 }

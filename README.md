@@ -44,7 +44,7 @@ Add this full repository URL in Kiosk Satellite's Plugin Manager:
 
 https://github.com/mortalone/kiosk-satellite-party-mode
 
-Use Party Mode 0.1.5+, Now Playing 0.2.4+, Spectrum Visualizer 0.2.11+ and Quick Actions 0.2.7+. The companions retain their own visibility when Party closes. Update Now Playing to remove the old full-screen Party actions, then enable this plugin and select the intended MA speaker group.
+Use Party Mode 0.1.6+, Now Playing 0.2.4+, Spectrum Visualizer 0.2.11+ and Quick Actions 0.2.7+. The companions retain their own visibility when Party closes. Update Now Playing to remove the old full-screen Party actions, then enable this plugin and select the intended MA speaker group.
 
 ```sh
 python3 tools/build.py --android-platform 35
@@ -85,3 +85,7 @@ Search uses a drawn magnifying-glass icon, a dark rounded field, cover thumbnail
 **Graphics:** the queue/QR uses a separate native View, so Android can retain its display list while the animated background updates. The full-screen CPU bitmap cache is removed. The background is preblended, spectrum/waveform buffers are reused, colors/radial directions are precalculated, and frames align with Android's animation scheduling. `10 FPS Eco` / `20 FPS Eco` use 32 bands, 64 waveform samples, 28 particles or 7 rings. Settings reports whether the actual drawing Canvas is hardware accelerated. The plugin follows the host's graphics pipeline; it cannot supply a missing Pi Android GPU driver. Emulator smoke tests validate native main/search/placement/favorites/settings/lyrics panels with mock MA, not actual Pi frame rates or live MA playback.
 
 Backend compatibility: the original All controls choice migrates to Menu only to hide Close by default. Existing HA controlsAll explicitly selects Menu and Close. Volume visibility actions remain independent of its Buttons/Slider style. Playlist/EQ access shares one select with all four combinations to stay within Kiosk SDK 1's 20-setting limit.
+
+### Updating from 0.1.3 (0.1.6)
+
+0.1.6 accepts the saved `All controls` choice during Kiosk's pre-load settings validation, then treats it as `Menu only` to hide Close. This fixes `Unknown selection option` when updating directly from 0.1.3. The installer regression check now exercises retained settings from the original 0.1.3 manifest and every old select option, not only a fresh installation.
