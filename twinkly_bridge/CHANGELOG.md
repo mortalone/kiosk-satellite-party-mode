@@ -1,3 +1,14 @@
+# 0.1.3
+
+- Register as both a silent audio player and visualizer by default so Music Assistant can select a playback output protocol.
+- Accept stereo 16-bit PCM at 48/44.1 kHz, discard audio immediately and continue rendering only server-provided visualizer frames.
+- Report player timing/state and acknowledge volume/mute changes without changing LED brightness.
+- Send the initial availability/state after guest playback activation, avoiding a race that could leave the server's visualizer binary gate closed.
+- Add a separate audio-packet counter in the control panel to distinguish audio reception from visualization reception.
+- Preserve the existing Sendspin identity; `sendspin_player: false` restores the previous visualizer-only behavior.
+- Cover dual-role negotiation, actual PCM reception, simultaneous visualizer frames and volume/mute acknowledgements against classic WebSocket and the official encrypted reference server.
+- Mixed Pi/Sonos universal-group playback still requires hardware verification; this release does not claim that group membership or native Sonos timing is fixed.
+
 # 0.1.2
 
 - Handle non-JSON ingress/proxy responses with a readable HTTP status instead of a JSON parser exception.

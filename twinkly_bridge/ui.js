@@ -76,7 +76,7 @@ if (typeof document !== 'undefined') {
       const source = s.sendspin || {};
       $('source').textContent = source.connected ? 'Sendspin forbundet'+(source.group?' · '+source.group:'')+'\n'+(s.audio_fresh?'Modtager visualiseringsdata':source.clock_synced?'Venter på musik fra gruppen':'Synkroniserer ur…') : source.state === 'disabled' ? 'Angiv sendspin_url under konfiguration' : 'Sendspin: '+(source.state||'venter');
       $('error').textContent = [s.error, source.error].filter(Boolean).join('\n');
-      $('diagnostics').textContent = 'Ønsket: '+s.mode+' · Aktiv: '+s.applied_mode+' · Gendannet realtime: '+s.recoveries+' · Frames: '+(source.frames_rendered||0);
+      $('diagnostics').textContent = 'Ønsket: '+s.mode+' · Aktiv: '+s.applied_mode+' · Gendannet realtime: '+s.recoveries+' · Frames: '+(source.frames_rendered||0)+(source.roles?.includes('player@v1')?' · Lydpakker: '+(source.audio_chunks_received||0)+' (uden lydudgang)':'');
     } catch (error) {
       $('error').textContent = error.message;
       $('status').textContent = 'Aktuel status kunne ikke hentes';

@@ -68,6 +68,12 @@ class BufferTest(unittest.TestCase):
 
 class ProtocolTest(unittest.IsolatedAsyncioTestCase):
     async def test_legacy_websocket_stream_pause_and_scheduling(self):
+        await self.check_legacy_stream(True)
+
+    async def test_legacy_visualizer_only_fallback(self):
+        await self.check_legacy_stream(False)
+
+    async def check_legacy_stream(self, player):
         received = []
         socket_ready = asyncio.Event()
         live_socket = []
@@ -89,16 +95,32 @@ class ProtocolTest(unittest.IsolatedAsyncioTestCase):
         site = web.TCPSite(runner,'127.0.0.1',0);await site.start()
         port = site._server.sockets[0].getsockname()[1]
         bridge = Bridge({})
-        source = SendspinSource(bridge, {'sendspin_url':f'ws://127.0.0.1:{port}/sendspin'})
+        source = SendspinSource(bridge, {'sendspin_url':f'ws://127.0.0.1:{port}/sendspin', 'sendspin_player':player})
         render = asyncio.create_task(source.render())
         async with ClientSession() as session:
             task = asyncio.create_task(source.legacy(Identity.generate(),session))
             try:
                 await asyncio.wait_for(socket_ready.wait(),2)
                 await eventually_async(lambda: source.status()['clock_synced'])
-                self.assertEqual(received[0]['payload']['supported_roles'],['visualizer@v1'])
-                self.assertNotIn('player@v1_support',received[0]['payload'])
+                hello = received[0]['payload']
+                self.assertEqual(hello['supported_roles'],['player@v1','visualizer@v1'] if player else ['visualizer@v1'])
+                self.assertEqual('player@v1_support' in hello, player)
                 socket = live_socket[0]
+                if player:
+                    self.assertEqual(hello['player@v1_support']['supported_commands'], ['volume','mute'])
+                    self.assertEqual({f['codec'] for f in hello['player@v1_support']['supported_formats']}, {'pcm'})
+                    state = next(m['payload'] for m in received if m['type']=='client/state')['player']
+                    self.assertEqual(state['volume'],100)
+                    self.assertFalse(state['muted'])
+                    await socket.send_json({'type':'stream/start','payload':{'player':{'codec':'pcm','sample_rate':48000,'channels':2,'bit_depth':16}}})
+                    await socket.send_bytes(bytes([4])+struct.pack('>q',time.monotonic_ns()//1000)+bytes(1920))
+                    await eventually_async(lambda: source.status()['audio_chunks_received']==1)
+                    self.assertEqual(source.status()['audio_bytes_received'],1920)
+                    self.assertFalse(bridge.status()['audio_fresh'], 'audio must not drive LEDs or create a visualizer frame')
+                    await socket.send_json({'type':'server/command','payload':{'player':{'command':'volume','volume':37}}})
+                    await eventually_async(lambda: any(m['type']=='client/state' and m['payload'].get('player',{}).get('volume')==37 for m in received))
+                    await socket.send_json({'type':'server/command','payload':{'player':{'command':'mute','mute':True}}})
+                    await eventually_async(lambda: any(m['type']=='client/state' and m['payload'].get('player',{}).get('muted') is True for m in received))
                 await socket.send_json({'type':'stream/start','payload':{'visualizer':{'types':['spectrum'],'rate_max':20,'spectrum':{'n_disp_bins':2}}}})
                 due = time.monotonic_ns()//1000+250000
                 await socket.send_bytes(bytes([19])+struct.pack('>qHH',due,0,65535))
@@ -115,8 +137,16 @@ class ProtocolTest(unittest.IsolatedAsyncioTestCase):
                 await runner.cleanup()
 
     async def test_noise_client_with_official_reference_server(self):
+        await self.check_noise_stream(True)
+
+    async def test_noise_visualizer_only_fallback(self):
+        await self.check_noise_stream(False)
+
+    async def check_noise_stream(self, player):
         from aiosendspin.server import SendspinServer
         from aiosendspin.models.core import StreamStartMessage, StreamStartPayload
+        from aiosendspin.models.player import StreamStartPlayer
+        from aiosendspin.models.types import AudioCodec
         server = SendspinServer(asyncio.get_running_loop(),Identity.generate(),'test',pairing_store=InMemoryServerPairingStore())
         self.addAsyncCleanup(server._client_session.close)
         runner = web.AppRunner(server._create_web_application());await runner.setup()
@@ -124,7 +154,7 @@ class ProtocolTest(unittest.IsolatedAsyncioTestCase):
         site = web.TCPSite(runner,'127.0.0.1',0);await site.start()
         port = site._server.sockets[0].getsockname()[1]
         bridge = Bridge({})
-        source = SendspinSource(bridge,{'sendspin_url':f'ws://127.0.0.1:{port}/sendspin'})
+        source = SendspinSource(bridge,{'sendspin_url':f'ws://127.0.0.1:{port}/sendspin', 'sendspin_player':player})
         render = asyncio.create_task(source.render())
         with tempfile.TemporaryDirectory() as folder:
             identity = load_identity(Path(folder))
@@ -137,21 +167,40 @@ class ProtocolTest(unittest.IsolatedAsyncioTestCase):
                     await server.trust_unpaired(identity.peer_id)
                     await eventually_async(lambda: source.status()['connected'])
                     client = server.get_client(identity.peer_id)
-                    self.assertEqual(client.negotiated_role_ids,['visualizer@v1'])
+                    self.assertEqual(set(client.negotiated_role_ids),{'player@v1','visualizer@v1'} if player else {'visualizer@v1'})
+                    await eventually_async(lambda: client.role('visualizer@v1') is not None)
+                    client.group.start_stream()
+                    await eventually_async(lambda: source.status()['playback']=='playing')
+                    if player:
+                        await eventually_async(lambda: client.role('player@v1') is not None)
+                        self.assertEqual([c.value for c in client.info.player_support.supported_commands], ['volume','mute'])
+                        self.assertEqual({f.codec for f in client.info.player_support.supported_formats}, {AudioCodec.PCM})
+                        client.send_role_message('player',StreamStartMessage(payload=StreamStartPayload(player=StreamStartPlayer(codec=AudioCodec.PCM, sample_rate=48000, channels=2, bit_depth=16))))
+                        stamp=server.clock.now_us()+300000
+                        client.send_binary(bytes([4])+struct.pack('>q',stamp)+bytes(1920),role_family='player',timestamp_us=stamp,message_type=4)
+                        await eventually_async(lambda: source.status()['audio_chunks_received']==1)
+                        self.assertEqual(source.status()['audio_bytes_received'],1920)
+                        self.assertFalse(bridge.status()['audio_fresh'])
+                        role = client.role('player@v1')
+                        await eventually_async(lambda: role.get_audio_requirements() is not None)
+                        role.set_volume(37)
+                        await eventually_async(lambda: role.volume==37)
+                        role.set_mute(True)
+                        await eventually_async(lambda: role.muted)
                     client.send_role_message('visualizer',StreamStartMessage(payload=StreamStartPayload(visualizer=StreamStartVisualizer.from_support(source.support))))
                     # Give the protocol time filter its two initial samples.
                     await asyncio.sleep(0.6)
                     await eventually_async(lambda: source.status()['clock_synced'])
                     self.assertEqual(source.status()['frames_received'],0,
                         'clock status must update even before music frames arrive')
-                    for _ in range(20):
-                        stamp=server.clock.now_us()+200000
+                    for _ in range(50):
+                        stamp=server.clock.now_us()+400000
                         packet=bytes([19])+struct.pack('>q',stamp)+struct.pack('>32H',*([65535]*32))
                         client.send_binary(packet,role_family='visualizer',timestamp_us=stamp,message_type=19)
                         await asyncio.sleep(0.1)
                         if bridge.status()['audio_fresh']:
                             break
-                    self.assertTrue(bridge.status()['audio_fresh'])
+                    self.assertTrue(bridge.status()['audio_fresh'], repr(source.status()))
                     self.assertEqual(bridge.bands,[1]*32)
                     self.assertEqual(source.status()['protocol'],'noise')
                 finally:

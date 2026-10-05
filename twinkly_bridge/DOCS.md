@@ -20,6 +20,7 @@ Home Assistant OS/Supervised with the add-on store is required.
 | `speed` | 1 | Initial movement speed, 0.1–5 |
 | `sendspin_url` | empty | Direct Music Assistant Sendspin URL, e.g. `ws://192.168.1.10:8927/sendspin` |
 | `sendspin_protocol` | auto | Detect classic servers or use the official encrypted Noise client; force `legacy`/`noise` if needed |
+| `sendspin_player` | true | Register as a silent PCM audio receiver plus visualizer for group compatibility; false restores visualizer-only mode |
 | `light_delay_ms` | 0 | Light timing adjustment: positive means later, negative means earlier; −2000 to 2000 ms |
 | `music_pattern` | mirror | Initial music style: spectrum, mirror, pulse, wave, particles, tunnel |
 
@@ -75,30 +76,42 @@ Call `rest_command.twinkly_bridge` with data `mode: rainbow` (or another support
    If MA runs on your Home Assistant machine, use that machine's local IP.
    Check that MA's Sendspin provider is enabled and its port is reachable.
 2. Restart Twinkly Bridge. Its UI should report **Sendspin forbundet**.
-3. In Music Assistant, find the new **Twinkly Bridge** visualization device and
-   join it to the active Sendspin player/group carrying your music.
+3. In Music Assistant, find **Twinkly Bridge**. With `sendspin_player: true`
+   (the default), it registers as an audio receiver and visualizer. Try adding it
+   to your existing universal group. Stop and restart the group after changing
+   membership. Do not create a new group just for this test.
+   With `sendspin_player: false`, join it to an active native Sendspin player/group.
 4. Choose **Musik** or a music pattern in the add-on. The UI reports the group,
    clock synchronization and whether visualizer data is arriving.
 
 The add-on receives 32 spectrum bands plus loudness and transient peaks at up to
-the selected FPS. It does not decode or play audio and does not depend on Kiosk
-Satellite. Future frames are buffered and rendered using the server's playback
+the selected FPS. With `sendspin_player: true`, it also advertises a player role
+and accepts stereo 16-bit PCM at 48 or 44.1 kHz. It counts and discards incoming
+audio immediately; it has no sound output, audio queue, microphone or local FFT.
+Only server-provided visualizer data drives the light. It does not depend on Kiosk
+Satellite. The additional PCM stream uses network bandwidth (about 192 kB/s at
+48 kHz). Player volume and mute are acknowledged for protocol compatibility;
+they do not control LED brightness, which is adjusted in the add-on. Future frames are buffered and rendered using the server's playback
 timestamps; seeks, pauses, stream ends and reconnects clear old data. Missing data
 causes blackout after 1.5 seconds. The timeline is bounded to prevent accumulating
 latency. `light_delay_ms` lets you adjust for the actual Flex/network response.
 
 The official `aiosendspin` 9.1.1 client handles encrypted Noise transport and time
-synchronization. Receive-only guest access is enabled for this visualizer client;
+synchronization. Receive-only guest access is enabled for the playback/visualizer client;
 MA normally approves this automatically. Its stable identity and pairing store
-live only in the add-on's private `/data`. No MA control token or player role is
-requested. Automatic classic-protocol detection applies only when a server sends
+live only in the add-on's private `/data`. The identity is preserved on upgrade.
+No MA control token, controller role or source role is requested. Automatic classic-protocol detection applies only when a server sends
 a plaintext `server/hello`; it does not downgrade after an authentication error.
 For older servers that wait for a client hello first, select `legacy` explicitly.
 
-A plain Sonos player/group may not carry Sendspin visualizer data. The bridge must
-join a Sendspin stream/group, just like MA's Hue light synchronization. The Kiosk
-can be part of that group as an existing Sendspin player; it does not process or
-forward the light data. Playing independently in the Sonos app is not automatically
+A plain Sonos player/group does not automatically provide a Sendspin visualizer
+feed. The default silent-player mode is intended to let a universal group start a
+separate Sendspin stream for the bridge while playing on Sonos/Pi members. This
+needs verification on the actual mixed group; acceptance does not guarantee
+visualizer delivery or synchronization with native Sonos. If only **Lydpakker**
+increases but **Frames** remains zero, the audio role works but visualizer delivery
+is still missing. Disable `sendspin_player` to return to the previous visualizer-only
+behavior. The Kiosk does not process or forward the light data. Playing independently in the Sonos app is not automatically
 captured by this connection.
 
 ## Music patterns
@@ -137,8 +150,10 @@ Do not feed this endpoint concurrently with an active Sendspin source.
 This uses unofficial local Twinkly APIs. Chase output was confirmed on the user's
 Flex with 0.1.0. Direct Sendspin visualization was confirmed on the user's Flex
 with 0.1.1 through both a browser player and the Pi Sendspin player. Membership
-retention under a universal group remains unresolved. 0.1.2 adds clearer status
-and timestamped diagnostics, not an automatic grouping fix.
+retention under a universal group was unresolved in 0.1.1/0.1.2. Version 0.1.3
+adds the silent player role for a hardware compatibility test. Registration, PCM
+reception and simultaneous visualization pass against the official Sendspin
+reference server, but mixed Pi/Sonos universal-group behavior is not yet verified.
 Connection errors appear in the UI and log, with retries every five seconds.
 Verify the IP and local network access first. Authentication, firmware or LED protocol
 differences may require adaptation after the first hardware test. No firmware update
