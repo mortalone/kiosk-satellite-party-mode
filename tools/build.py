@@ -74,12 +74,13 @@ with tempfile.TemporaryDirectory(prefix=f'ks-{manifest["id"]}-') as td:
     with zipfile.ZipFile(package, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("kiosk-satellite-plugin.json", manifest_bytes)
         z.write(plugin_jar, "plugin.jar")
-        z.write(ROOT / "LICENSE", "LICENSE")
+        license_text = (ROOT / "LICENSE").read_text()
         notices = ROOT / "THIRD_PARTY_NOTICES.md"
-        if notices.is_file(): z.write(notices, "THIRD_PARTY_NOTICES.md")
+        if notices.is_file():
+            license_text += "\n\nThird-party notices\n\n" + notices.read_text()
+        z.writestr("LICENSE", license_text)
 
     digest = hashlib.sha256(package.read_bytes()).hexdigest()
     (out / (package.name + ".sha256")).write_text(f"{digest}  {package.name}\n")
     print(package)
     print(digest)
-

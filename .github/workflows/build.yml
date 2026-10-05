@@ -36,6 +36,17 @@ jobs:
           for TEST in PartyQueueModelTest PartyGuestLinkTest PartyGuestConfigTest PartySignalTest PartyQrTest PartyActivationTest; do
             java -cp /tmp/party-test:/tmp/party-json.jar:/tmp/qr-decoder.jar "me.jxl.kiosk.plugins.partymode.$TEST"
           done
+      - name: Verify release ZIP with Kiosk Satellite installer
+        run: |
+          curl --fail --silent --show-error --location https://github.com/JetBrains/kotlin/releases/download/v2.0.21/kotlin-compiler-2.0.21.zip -o /tmp/kotlin-compiler.zip
+          unzip -q /tmp/kotlin-compiler.zip -d /tmp/party-kotlin
+          KIOSK_REF=382621d4722d3bf9b7de83ec70750df443d7d528
+          KIOSK_SRC="https://raw.githubusercontent.com/jxlarrea/kiosk-satellite/$KIOSK_REF/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/plugins"
+          curl --fail --silent --show-error --location "$KIOSK_SRC/PluginPackage.kt" -o /tmp/PluginPackage.kt
+          curl --fail --silent --show-error --location "$KIOSK_SRC/PluginManifest.kt" -o /tmp/PluginManifest.kt
+          /tmp/party-kotlin/kotlinc/bin/kotlinc /tmp/PluginPackage.kt /tmp/PluginManifest.kt tests/PluginInstallTest.kt -cp /tmp/party-json.jar -include-runtime -d /tmp/party-installer-test.jar
+          VERSION=$(python3 -c 'import json; print(json.load(open("kiosk-satellite-plugin.json"))["version"])')
+          java -cp /tmp/party-installer-test.jar:/tmp/party-json.jar PluginInstallTestKt "dist/party-mode-$VERSION.zip" kiosk-satellite-plugin.json
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

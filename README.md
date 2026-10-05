@@ -41,10 +41,10 @@ Add this full repository URL in Kiosk Satellite's Plugin Manager:
 
 https://github.com/mortalone/kiosk-satellite-party-mode
 
-Use Party Mode 0.1.0+, Now Playing 0.2.4+, Spectrum Visualizer 0.2.11+ and Quick Actions 0.2.6+. The companions retain their own visibility when Party closes. Update Now Playing to remove the old full-screen Party actions, then enable this plugin and select the intended MA speaker group.
+Use Party Mode 0.1.1+, Now Playing 0.2.4+, Spectrum Visualizer 0.2.11+ and Quick Actions 0.2.6+. The companions retain their own visibility when Party closes. Update Now Playing to remove the old full-screen Party actions, then enable this plugin and select the intended MA speaker group.
 
 ```sh
 python3 tools/build.py --android-platform 35
 ```
 
-CI compiles Android Java, D8 and the package, then tests queue selection, guest matching, QR decoding, frame bounds, start/stop and visibility. Real kiosk drawing, Home Assistant action discovery and live MA guest access require device verification.
+CI also extracts the actual release ZIP using Kiosk Satellite’s pinned SDK 1 installer and verifies its manifest, checksum and bundled QR license before publication. It reproduces the rejected extra root file as a regression check. CI compiles Android Java, D8 and the package, then tests queue selection, guest matching, QR decoding, frame bounds, start/stop and visibility. Real kiosk drawing, Home Assistant action discovery and live MA guest access require device verification.
