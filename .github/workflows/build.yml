@@ -3,6 +3,7 @@ name: Build and release Party Mode
 on:
   push:
     branches: [main]
+    paths-ignore: ["twinkly_bridge/**", ".github/workflows/twinkly.yml", "repository.yaml"]
   workflow_dispatch:
 
 concurrency:

@@ -91,6 +91,37 @@ class BehaviorTest(unittest.TestCase):
         finally:
             bridge.stop()
 
+    def test_color_patch_preserves_effect_and_off_to_chase(self):
+        device = FakeDevice()
+        bridge = Bridge({"device_ip": "192.168.1.10", "fps": 30}, lambda _: device)
+        bridge.thread.start()
+        try:
+            bridge.control({"mode": "chase"})
+            eventually(lambda: len(device.frames) > 1)
+            changed = bridge.control({"color": "#00ff00"})
+            self.assertEqual(changed["mode"], "chase")
+            eventually(lambda: any(p[1] and not p[0] and not p[2] for p in device.frames[-1]))
+            bridge.control({"mode": "color"})
+            eventually(lambda: all(p == b"\x00\xff\x00" for p in device.frames[-1]))
+            bridge.control({"mode": "off"})
+            eventually(lambda: device.modes == ["off"])
+            count = len(device.frames)
+            bridge.control({"mode": "chase"})
+            eventually(lambda: len(device.frames) >= count + 3)
+            self.assertNotEqual(device.frames[-1], device.frames[-3], "chase must animate after off")
+        finally:
+            bridge.stop()
+
+    def test_party_patterns_are_bounded_and_silence_is_dark(self):
+        for pattern in ("spectrum", "mirror", "pulse", "wave", "particles", "tunnel"):
+            with self.subTest(pattern=pattern):
+                pixels = frame_colors("music", 100, 0.3, (0, 255, 0), [0.2, 0.5, 1], pattern, 0.5, 1)
+                self.assertEqual(len(pixels), 100)
+                self.assertTrue(all(0 <= c <= 255 for pixel in pixels for c in pixel))
+                self.assertTrue(all(pixel == (0, 0, 0) for pixel in frame_colors("music", 12, 0.2, (255, 255, 255), [], pattern)))
+        mirror = frame_colors("music", 100, 0.2, (0, 255, 0), [0.2, 0.5, 1], "mirror")
+        self.assertEqual(mirror, list(reversed(mirror)))
+
     def test_real_library_uses_timeout_during_authentication(self):
         from requests.adapters import HTTPAdapter
         from requests.exceptions import ConnectTimeout
