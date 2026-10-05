@@ -10,6 +10,12 @@ public final class PartyFeaturesTest {
         check(!PartyLyrics.parse("", "A\nB").synced && PartyLyrics.parse("", "A\nB").lines.size() == 2, "plain lyrics never invent synchronization");
         check(PartyLyrics.parse(null, null).lines.isEmpty(), "missing metadata");
         check(PartyLyrics.parse("", "[00:05]Embedded").synced, "timed lyrics in plain metadata supported");
+        PartyLyrics lookup = PartyLyrics.fromLookup(new JSONArray().put(JSONObject.NULL).put("[00:03]API line"));
+        check(lookup.synced && lookup.index(3) == 0, "on-demand MA tuple: null plain and timed lyrics");
+        check(PartyLyrics.fromLookup(new JSONArray().put("Plain API text").put(JSONObject.NULL)).lines.size() == 1, "on-demand plain fallback");
+        check(PartyLyrics.fromLookup(new JSONArray().put("Plain").put("[00:00]Timed")).synced, "prefer synchronized API result");
+        check(PartyLyrics.fromLookup(new JSONArray().put(JSONObject.NULL).put(JSONObject.NULL)).lines.isEmpty(), "no matching lyrics");
+        check(PartyLyrics.fromLookup(new JSONObject().put("error_code", 5)).lines.isEmpty(), "API errors are not lyrics");
         float[] samples = new float[2]; PartyMotion.sample(new float[]{-9, Float.NaN, Float.POSITIVE_INFINITY, 8}, samples, false);
         check(samples[0] == 0 && samples[1] == 0.5f, "bounded reusable spectrum buffers");
         PartyMotion.sample(new float[]{-1, 1}, samples, true); check(samples[0] == -1 && samples[1] == 1, "waveform sign preserved");

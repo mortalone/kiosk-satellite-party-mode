@@ -40,6 +40,7 @@ public final class PartyQaActivity extends Activity {
                     if ("main".equals(mode) && hasDescription(getWindow().getDecorView(), "Afslut Party Mode")) throw new AssertionError("default Close visible");
                     if ("settings".equals(mode) && !hasText(((Dialog)field("searchDialog")).getWindow().getDecorView(), "VISUALISERING")) throw new AssertionError("new menu missing");
                     if ("playlists".equals(mode) && !hasText(((Dialog)field("searchDialog")).getWindow().getDecorView(), "Fredagsfest")) throw new AssertionError("favorites missing");
+                    if ("lyrics".equals(mode) && (!((PartyLyrics)field("lyrics")).synced || ((PartyLyrics)field("lyrics")).lines.isEmpty())) throw new AssertionError("on-demand MA lyrics not displayed");
                     if ("placement".equals(mode) && field("selectionDialog") == null) throw new AssertionError("placement panel missing");
                     android.util.Log.i("PARTY_QA", "QA_READY " + mode + " hardware=" + view.hardwareCanvas());
                 }, 1600);
@@ -86,7 +87,7 @@ public final class PartyQaActivity extends Activity {
     private JSONObject media(int i) throws Exception {
         String[] names={"Kom indenfor","Efterglød","Nattens puls","Varm vind","Aftenlys","Stjernestøv","Midnat","På vej hjem","Den sidste dans"};
         JSONObject meta=new JSONObject().put("images",new JSONArray().put(new JSONObject().put("type","thumb").put("path","http://127.0.0.1:18095/cover/"+i).put("remotely_accessible",true)));
-        meta.put("lrc_lyrics","[00:00]Vi tænder lys i byen\n[00:30]Og danser gennem natten\n[00:46]Her er plads til alle\n[01:00]Musikken finder vej\n[01:20]Vi mødes under stjernerne\n[01:40]Og bliver lidt endnu");
+        // Deliberately no stored lyrics: real MA may return text only on demand.
         return new JSONObject().put("uri","library://track/"+i).put("provider","library").put("item_id",""+i).put("name",names[i%names.length]).put("artists",new JSONArray().put(new JSONObject().put("name","Natteholdet"))).put("metadata",meta).put("available",true);
     }
     private Object response(JSONObject request) throws Exception {
@@ -97,6 +98,10 @@ public final class PartyQaActivity extends Activity {
         if(cmd.equals("music/search")){JSONArray tracks=new JSONArray();for(int i=4;i<9;i++)tracks.put(media(i));return new JSONObject().put("tracks",tracks);}
         if(cmd.equals("music/playlists/library_items")){JSONArray items=new JSONArray();String[] names={"Fredagsfest","Rolig aften","Sommer i haven"};for(int i=0;i<3;i++)items.put(media(i).put("name",names[i]).put("uri","library://playlist/"+i).put("favorite",true));return items;}
         if(cmd.equals("music/tracks/get"))return media(4);
+        if(cmd.equals("metadata/get_track_lyrics")) {
+            if (!"library://track/4".equals(args.getJSONObject("track").optString("uri"))) throw new AssertionError("wrong lyrics track");
+            return new JSONArray().put(JSONObject.NULL).put("[00:00]Vi tænder lys i byen\n[00:30]Og danser gennem natten\n[00:46]Her er plads til alle\n[01:00]Musikken finder vej\n[01:20]Vi mødes under stjernerne\n[01:40]Og bliver lidt endnu");
+        }
         return JSONObject.NULL;
     }
     private JSONObject item(int i)throws Exception{return new JSONObject().put("queue_item_id","q"+i).put("media_item",media(i)).put("duration",220);}

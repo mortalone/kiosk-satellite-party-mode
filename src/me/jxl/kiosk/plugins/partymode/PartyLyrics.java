@@ -16,6 +16,13 @@ final class PartyLyrics {
         JSONObject metadata = media == null ? null : media.optJSONObject("metadata");
         return parse(metadata == null ? "" : metadata.optString("lrc_lyrics", ""), metadata == null ? "" : metadata.optString("lyrics", ""));
     }
+    /** MA metadata/get_track_lyrics returns [plain lyrics, synchronized LRC]. */
+    static PartyLyrics fromLookup(Object response) {
+        if (!(response instanceof org.json.JSONArray)) return parse("", "");
+        org.json.JSONArray values = (org.json.JSONArray) response;
+        Object plain = values.opt(0), timed = values.opt(1);
+        return parse(timed instanceof String ? (String) timed : "", plain instanceof String ? (String) plain : "");
+    }
     static PartyLyrics parse(String lrc, String plain) {
         lrc = bounded(lrc); plain = bounded(plain); if (lrc.isEmpty() && plain.matches("(?s).*\\[\\d{1,3}:\\d{2}.*")) lrc = plain;
         List<Line> result = new ArrayList<>();

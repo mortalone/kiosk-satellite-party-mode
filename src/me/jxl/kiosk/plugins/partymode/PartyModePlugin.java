@@ -756,12 +756,24 @@ public final class PartyModePlugin implements KioskPlugin {
         final String id = partyTrackMedia.optString("item_id", ""), provider = partyTrackMedia.optString("provider", "");
         if (id.isEmpty() || provider.isEmpty()) return;
         final String base = maBase(), token = maToken; final long generation = lyricsGeneration, queueGeneration = partyGeneration;
+        final JSONObject queuedTrack = partyTrackMedia;
         lyricsPending = true;
         io.execute(() -> {
             PartyLyrics value = null;
-            try { Object media = partyRequest(base, token, "music/tracks/get", new JSONObject().put("item_id", id).put("provider_instance_id_or_domain", provider));
-                if (media instanceof JSONObject) value = PartyLyrics.fromMedia((JSONObject)media);
+            JSONObject fullTrack = queuedTrack;
+            try {
+                Object media = partyRequest(base, token, "music/tracks/get", new JSONObject().put("item_id", id).put("provider_instance_id_or_domain", provider));
+                if (media instanceof JSONObject && ((JSONObject)media).has("item_id")) fullTrack = (JSONObject)media;
+                value = PartyLyrics.fromMedia(fullTrack);
             } catch (Throwable ignored) {}
+            if (value == null || value.lines.isEmpty()) {
+                try {
+                    // Same on-demand lookup as MA's own Now Playing UI: queue metadata
+                    // and tracks/get may have no stored lyrics even when the provider does.
+                    value = PartyLyrics.fromLookup(partyRequest(base, token, "metadata/get_track_lyrics",
+                            new JSONObject().put("track", fullTrack), 15000));
+                } catch (Throwable ignored) {}
+            }
             final PartyLyrics found = value;
             main.post(() -> { lyricsPending = false; if (host == null || generation != lyricsGeneration || queueGeneration != partyGeneration) return;
                 if (found != null && !found.lines.isEmpty()) { lyrics = found; if (lyricsView != null) lyricsView.setLyrics(lyrics); }
@@ -1163,11 +1175,14 @@ public final class PartyModePlugin implements KioskPlugin {
     }
 
     private Object partyRequest(String base, String token, String command, JSONObject args) throws Exception {
+        return partyRequest(base, token, command, args, 3500);
+    }
+    private Object partyRequest(String base, String token, String command, JSONObject args, int readTimeout) throws Exception {
         URL url = new URL(base + "/api");
         if (!("http".equals(url.getProtocol()) || "https".equals(url.getProtocol())) || url.getUserInfo() != null) return null;
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setInstanceFollowRedirects(false);
-        connection.setConnectTimeout(2500); connection.setReadTimeout(3500);
+        connection.setConnectTimeout(2500); connection.setReadTimeout(readTimeout);
         connection.setRequestMethod("POST"); connection.setDoOutput(true); connection.setUseCaches(false);
         connection.setRequestProperty("Authorization", "Bearer " + token);
         connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");

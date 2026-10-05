@@ -1,5 +1,6 @@
-Party Mode 0.1.6
+Party Mode 0.1.7
 
-- Fix updating from 0.1.3 with the saved All controls selection: Kiosk now accepts it before the plugin migrates it to Menu only (Close hidden).
-- Add an installer upgrade regression test using the original 0.1.3 manifest and every previous selection option, alongside fresh-install and native UI checks.
-- Includes the modern UI, queue placement, lyrics, favorite playlists and rendering improvements from 0.1.5.
+- Fetch missing lyrics with metadata/get_track_lyrics, the same on-demand API used by Music Assistant's Now Playing screen.
+- Decode MA's [plain, synchronized] lyrics response, including null values, and allow slower provider lookups without changing queue/control request timeouts.
+- Regression checks cover on-demand response parsing; Android smoke tests now require synchronized text when both queue and full track metadata contain no lyrics.
+- Retains the 0.1.6 upgrade fix and all Party UI features.
