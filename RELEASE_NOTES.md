@@ -1,6 +1,7 @@
 Party Mode 0.1.8
 
 - Add a Home Assistant Party Mode switch that reports activation and accepts on/off commands. Visibility/playback conditions still apply; disabled plugins become unavailable.
+- Add a HA visualization select without exceeding Kiosk’s 20-command limit; existing actions are preserved.
 - Add Disco Lyrics: centered large synchronized lines, neon colors, audio-reactive glow and subtle scale. Plain lyrics stay readable without invented timestamps.
 - Add an experimental AI DJ search mode backed by Music Assistant Sonic Similarity. Requires enabled free-text search and analyzed library tracks; English is recommended in this first test.
 - Include a Home Assistant package and Lovelace example using the same search engine, with optional Danish-to-English translation through an existing HA AI Task.

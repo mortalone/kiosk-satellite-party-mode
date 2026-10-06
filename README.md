@@ -109,7 +109,7 @@ switch. It reports Party's activation state, accepts on/off commands and follows
 start/stop actions and close gestures. Visibility/playback conditions can refuse
 activation or switch it off; disabling the plugin makes the entity unavailable.
 
-Choose **Disco Lyrics** in the Party settings menu or its HA action. It uses the
+Choose **Disco Lyrics** in the Party settings menu or select `discolyrics` in the HA **Party visualisering** select. It uses the
 same MA lyrics as ordinary Lyrics, highlights synchronized lines and adds bounded
 color/glow/scale updates from the existing audio analyzer (no extra FFT). Unsynced
 lyrics are displayed without simulated timing.

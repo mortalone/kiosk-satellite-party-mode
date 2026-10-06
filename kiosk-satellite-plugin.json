@@ -312,10 +312,6 @@
     {
       "id": "playbackToggle",
       "title": "Show/hide playback controls (saved)"
-    },
-    {
-      "id": "partyEffectDiscolyrics",
-      "title": "Party visualizer: Disco Lyrics (saved)"
     }
   ],
   "groups": [

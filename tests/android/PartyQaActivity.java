@@ -72,6 +72,7 @@ public final class PartyQaActivity extends Activity {
                     Map<String,Object> response = new HashMap<>(); response.put("state", "playing"); response.put("attributes", attrs); callback.onResult(true, response, null);
                 } else callback.onResult(true, Collections.emptyMap(), null);
             }
+            @Override public void publishSelect(String key, String name, String[] options, String value) {}
             @Override public void publishSwitch(String key, String name, boolean state) { if (!"active".equals(key)) throw new AssertionError(key); publishedPartyState = state; }
             @Override public void subscribe(String event) {} @Override public void unsubscribe(String event) {}
             @Override public void showWindow(String a, String b, String c) {} @Override public void hideWindow() {}

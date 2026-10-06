@@ -110,6 +110,7 @@ public final class PartyModePlugin implements KioskPlugin {
     private long searchGeneration;
     private String reportedGuestStatus = "";
     private Boolean reportedPartyState;
+    private String reportedPartyEffect;
     private boolean partyPollPending, partyGuestPending, partyGuestChangePending;
     private long partyLastPoll, partyLastSuccess, partyGuestLastPoll, partyGuestLastSuccess, partyLastPostpone;
     private volatile long partyGeneration, partyGuestGeneration;
@@ -148,7 +149,7 @@ public final class PartyModePlugin implements KioskPlugin {
             context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit()
                     .putBoolean("party_fullscreen", false).putLong("party_until_ms", 0).apply();
             context.sendBroadcast(new Intent(PARTY_EVENT).setPackage(context.getPackageName()));
-            reportedPartyState = null; publishPartyState();
+            reportedPartyState = null; reportedPartyEffect = null; publishPartyState();
             configureOnMain(settings);
             readKioskMusicAssistantConfig();
             host.executeCommand("getDashboardState", Collections.emptyMap(), (ok, data, error) -> {
@@ -213,7 +214,7 @@ public final class PartyModePlugin implements KioskPlugin {
         }
         for (String id : wanted) if (subscriptions.add(id)) host.subscribe("ha.entity." + id);
         if (partyFullscreen) { removePartyView(); publishPresentation(); }
-        pollMedia(); pollVisibility(); updatePresentation();
+        pollMedia(); pollVisibility(); updatePresentation(); publishPartyState();
     }
     private String savedChoice(SharedPreferences prefs, String key, String configured) {
         String previous = prefs.getString("configured_" + key, null);
@@ -243,6 +244,9 @@ public final class PartyModePlugin implements KioskPlugin {
         });
     }
     @Override public synchronized void onEvent(String event, Map<String, Object> payload) {
+        if ("select.effect".equals(event)) {
+            main.post(() -> { if (host != null && context != null) setPartyEffect(String.valueOf(payload.get("option"))); }); return;
+        }
         if ("switch.active".equals(event)) {
             execute(Boolean.TRUE.equals(payload.get("on")) ? "show" : "hide", Collections.emptyMap()); return;
         }
@@ -334,7 +338,14 @@ public final class PartyModePlugin implements KioskPlugin {
         ensurePartyView(); updateParty();
     }
     private void publishPartyState() {
-        if (host == null || Boolean.valueOf(partyFullscreen).equals(reportedPartyState)) return;
+        if (host == null) return;
+        if (!partyEffect.equals(reportedPartyEffect)) {
+            try {
+                host.publishSelect("effect", "Party visualisering", new String[]{"off", "spectrum", "mirror", "radial", "wave", "particles", "tunnel", "lyrics", "discolyrics"}, partyEffect);
+                reportedPartyEffect = partyEffect;
+            } catch (Throwable error) { host.log("Party effect select unavailable: " + error.getMessage()); }
+        }
+        if (Boolean.valueOf(partyFullscreen).equals(reportedPartyState)) return;
         try { host.publishSwitch("active", "Party Mode", partyFullscreen); reportedPartyState = partyFullscreen; }
         catch (Throwable error) { host.log("Party switch unavailable: " + error.getMessage()); }
     }
@@ -925,6 +936,7 @@ public final class PartyModePlugin implements KioskPlugin {
     private void setPartyEffect(String effect) {
         partyEffect = PartySignal.effect(effect);
         context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit().putString("effect", partyEffect).apply();
+        publishPartyState();
         if (partyFullscreen) { removePartyView(); ensurePartyView(); publishPresentation(); pollPartyLyrics(); }
     }
     private void setPartyGuests(boolean follow) {
