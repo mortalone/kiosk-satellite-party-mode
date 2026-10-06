@@ -1,7 +1,9 @@
 const assert = require('node:assert/strict');
-const {ControlQueue,readApiResponse} = require('../ui.js');
+const {ControlQueue,readApiResponse,sourceDescription} = require('../ui.js');
 const deferred = () => {let resolve; const promise = new Promise(r => {resolve=r}); return {promise,resolve};};
 (async () => {
+  assert.match(sourceDescription({sendspin:{connected:true,clock_synced:true},spectrum_fresh:false,bass_fresh:true,audio_fresh:true}), /PCM-lyd.*baspuls fortsætter/);
+  assert.match(sourceDescription({sendspin:{connected:true,clock_synced:true},spectrum_fresh:false,bass_fresh:false}), /Venter på musik/);
   const response = (status, body) => ({status,ok:status===200,text:async()=>body});
   await assert.rejects(readApiResponse(response(503,'503: Service Unavailable')), /HTTP 503.*ikke JSON/);
   await assert.rejects(readApiResponse(response(200,'<html>Sign in</html>')), /ikke JSON/);

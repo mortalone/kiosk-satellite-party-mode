@@ -5,7 +5,7 @@ Includes an ingress control panel, individual LED test patterns and an authentic
 receiver for audio spectrum data. Connect directly to Music Assistant's Sendspin
 server for timestamped spectrum, loudness and peak data. The client advertises
 a silent PCM player and a visualizer role by default, allowing a universal group
-to treat it as an audio destination. Received audio is counted and discarded;
+to treat it as an audio destination. Received PCM is analyzed into timestamped 45–160 Hz bass envelopes and discarded;
 there is no audio output, microphone or local FFT analyzer. Set `sendspin_player`
 to false to restore visualizer-only mode.
 Six LED patterns are inspired by Party Mode's visualizations. A live Calm ↔ Disco
@@ -15,7 +15,9 @@ the brightness limit.
 Individual LED chase output was confirmed on the user's Flex with 0.1.0.
 Direct Sendspin visualization was confirmed with 0.1.1 through the browser and Pi
 players. The user confirmed 0.1.3 works with the mixed Pi/Sonos group.
-The new light dynamics in 0.1.4 still need judging on the physical Flex.
+Version 0.1.7 keeps bass pulses active when spectrum frames stop and preserves
+short attacks between LED refreshes. Physical speaker/Flex synchronization still
+requires testing; these pulses follow bass amplitude rises, not isolated kick drums.
 
 Dependencies are pinned and installed when the container is built, never in
 Home Assistant or Pyscript. No Home Assistant configuration directories, host

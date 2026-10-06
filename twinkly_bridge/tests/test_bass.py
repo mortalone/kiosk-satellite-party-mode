@@ -4,7 +4,7 @@ import sys
 import unittest
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from bass import PcmBass, BassFrame
+from bass import PcmBass, BassFrame, BassEnvelope
 from bridge import Bridge, MusicDynamics
 from sendspin_source import FrameBuffer, SendspinSource
 from types import SimpleNamespace
@@ -57,3 +57,48 @@ class TestBass(unittest.TestCase):
         source.set_delay(300)
         self.assertAlmostEqual(source.buffer.frames[0][0],10.84)
         source.clear_stream();self.assertEqual(bridge.bass_rms,0)
+
+    def test_short_hit_survives_between_led_frames_without_spectrum(self):
+        bridge=Bridge({});buffer=FrameBuffer(bridge)
+        for at,rms in [(10,.0001),(10.02,.015),(10.04,.0001)]:
+            self.assertTrue(buffer.add(BassFrame(0,rms),at,now=9.9))
+        self.assertEqual(buffer.drain(now=10.05),0)
+        self.assertEqual(bridge.bass_rms,.0001)
+        self.assertEqual(bridge.bass_hits,1)
+        bands,level,peak,rms,pulse=bridge.audio_snapshot(10.05,100)
+        self.assertEqual(len(bands),32)
+        self.assertGreater(pulse,.7)
+        output=MusicDynamics().process(bands,level,peak,1,100,.05,rms,pulse)
+        self.assertGreater(output[2],.7)
+        with patch('bridge.time.monotonic',return_value=10.05):
+            status=bridge.status()
+        self.assertTrue(status['audio_fresh']);self.assertFalse(status['spectrum_fresh'])
+        self.assertTrue(status['bass_fresh'])
+        self.assertEqual(bridge.audio_snapshot(10.3,100),([],0,0,None,None))
+        bridge.clear_audio();self.assertEqual(bridge.bass_envelope.pulse(10.05,100),0)
+
+    def test_sampled_pulse_uses_playback_time_not_drain_time(self):
+        bridge=Bridge({});buffer=FrameBuffer(bridge)
+        buffer.add(BassFrame(0,.0001),10,now=9.9)
+        buffer.add(BassFrame(0,.015),10.02,now=9.9)
+        buffer.drain(now=10.15)
+        self.assertAlmostEqual(bridge.bass_envelope.pulse(10.15,100),math.exp(-.13/.1))
+        # A device HTTP delay must cause a fresh read, not replay an old pulse.
+        self.assertIsNone(bridge.audio_snapshot(10.4,100)[4])
+
+    def test_repeated_hits_and_sustained_tone_have_no_synthetic_clock(self):
+        envelope=BassEnvelope();hits=[]
+        for i in range(100):
+            if envelope.feed(.015 if i%25 in (2,3,4) else .0001,i*.02):hits.append(i)
+        self.assertEqual(hits,[2,27,52,77])
+        steady=BassEnvelope()
+        self.assertFalse(any(steady.feed(.015,i*.02) for i in range(100)))
+        self.assertFalse(steady.feed(0,5))
+        self.assertEqual(steady.pulse(5,100),0)
+
+    def test_late_pcm_does_not_replay_a_hit(self):
+        bridge=Bridge({});buffer=FrameBuffer(bridge)
+        buffer.add(BassFrame(0,.015),10,now=9.9)
+        buffer.drain(now=10.4)
+        self.assertEqual(bridge.bass_hits,0)
+        self.assertEqual(bridge.bass_at,0)

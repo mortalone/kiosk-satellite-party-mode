@@ -12,6 +12,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from bass import BassEnvelope
 
 LOG = logging.getLogger("twinkly_bridge")
 MODES = {"color", "rainbow", "chase", "music", "off", "restore", "mood"}
@@ -65,7 +66,10 @@ class MusicDynamics:
         self.last_signal = None
         self.since_onset = 1.0
 
-    def process(self, bands, loudness, peak, gain, punch, dt, bass_rms=None):
+    def process(self, bands, loudness, peak, gain, punch, dt, bass_rms=None, pcm_pulse=None):
+        if not bands and bass_rms is not None:
+            level=min(1.0,bass_rms/max(.0001,(self.previous or bass_rms)*2))
+            bands=[level]*32; loudness=level; peak=0
         if not bands:
             self.__init__()
             return [], 0.0, 0.0, 1.0
@@ -84,7 +88,7 @@ class MusicDynamics:
             self.since_onset = 0.0
         self.last_signal = signal
         self.previous = signal if self.previous is None else self.previous+(signal-self.previous)*(1-math.exp(-dt/0.35))
-        self.pulse = max(self.pulse * math.exp(-dt/(0.35-0.28*amount)), onset,
+        self.pulse = pcm_pulse if pcm_pulse is not None else max(self.pulse * math.exp(-dt/(0.35-0.28*amount)), onset,
                          min(1.0, peak) if bass_rms is None else 0.0)
         if len(self.bands) != len(bands):
             self.bands = [0.0]*len(bands)
@@ -238,6 +242,7 @@ class Bridge:
         self.bands, self.bands_at = [], 0
         self.loudness, self.peak = 0.0, 0.0
         self.bass_rms, self.bass_at = 0.0, 0.0
+        self.bass_envelope= BassEnvelope();self.bass_hits=0
         self.info = {"connected": False, "leds": 0, "error": "", "applied_mode": "restore", "recoveries": 0}
         self.cover_data = None
         self.cover_palette = []
@@ -273,13 +278,17 @@ class Bridge:
             if peak is not None:
                 self.peak = peak
 
-    def bass(self, rms):
-        with self.lock: self.bass_rms, self.bass_at = rms, time.monotonic()
+    def bass(self, rms, at=None):
+        at=time.monotonic() if at is None else at
+        with self.lock:
+            self.bass_rms, self.bass_at = rms, at
+            if self.bass_envelope.feed(rms,at): self.bass_hits+=1
 
     def clear_audio(self):
         with self.lock:
             self.bands, self.bands_at, self.loudness, self.peak = [], 0, 0, 0
             self.bass_rms, self.bass_at = 0, 0
+            self.bass_envelope= BassEnvelope()
 
     def status(self):
         with self.lock:
@@ -295,9 +304,25 @@ class Bridge:
                     "revision": self.revision,
                     "bass_fresh": time.monotonic()-self.bass_at < 0.2,
                     "bass_rms": self.bass_rms,
-                    "audio_fresh": time.monotonic() - self.bands_at < 1.5}
+                    "bass_hits": self.bass_hits,
+                    "bass_pulse": self.bass_envelope.pulse(time.monotonic(),self.settings["punch"]),
+                    "spectrum_fresh": time.monotonic() - self.bands_at < 1.5,
+                    "audio_fresh": time.monotonic() - self.bands_at < 1.5 or time.monotonic()-self.bass_at < .2}
         result["sendspin"] = self.sendspin.status() if self.sendspin else {"connected": False, "state": "disabled"}
         return result
+
+    def audio_snapshot(self, now, punch):
+        """Read immediately before LED output, after any slow device HTTP calls."""
+        with self.lock:
+            bands = list(self.bands) if now-self.bands_at < 1.5 else []
+            loudness, peak = (self.loudness, self.peak) if bands else (0, 0)
+            rms = self.bass_rms if now-self.bass_at < .2 else None
+            pulse = self.bass_envelope.pulse(now, punch) if rms is not None else None
+            if not bands and rms is not None:
+                loudness = self.bass_envelope.level(rms)
+                bands = [loudness]*32
+            self.peak *= .85
+            return bands, loudness, peak, rms, pulse
 
     def run(self):
         mode = "restore"
@@ -315,10 +340,6 @@ class Bridge:
                     cover_data, self.cover_data = self.cover_data, None
                     settings, revision = dict(self.settings), self.revision
                     applied_mode = self.info["applied_mode"]
-                    bands = list(self.bands) if time.monotonic() - self.bands_at < 1.5 else []
-                    loudness, peak = (self.loudness, self.peak) if bands else (0, 0)
-                    bass_rms = self.bass_rms if time.monotonic()-self.bass_at < 0.2 else None
-                    self.peak *= 0.85
                 if cover_data is not None:
                     try:
                         target_palette = artwork_palette(cover_data)
@@ -366,12 +387,13 @@ class Bridge:
                                     self.info["recoveries"] += 1
                             next_rt_check = time.monotonic() + 2
                         now = time.monotonic()
+                        bands, loudness, peak, bass_rms, pcm_pulse = self.audio_snapshot(now, settings["punch"])
                         dt, last_frame = now-last_frame, now
                         phase = now * settings["speed"] * (1+0.7*settings["punch"]/100 if mode == "music" else 1) / 6
                         if mode != "music":
                             dynamics = MusicDynamics()
                         smooth, level, pulse, modulation = dynamics.process(bands, loudness, peak,
-                            settings["gain"], settings["punch"], dt, bass_rms)
+                            settings["gain"], settings["punch"], dt, bass_rms,pcm_pulse)
                         colors = frame_colors(mode, device.num_leds, phase, settings["color"], smooth,
                                               settings["pattern"], level, peak,
                                               settings["punch"], pulse, modulation,

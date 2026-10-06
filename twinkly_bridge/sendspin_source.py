@@ -76,13 +76,12 @@ class FrameBuffer:
         now = time.monotonic() if now is None else now
         bands, loudness, peak = None, None, None
         count = 0
-        bass_rms = None
         while self.frames and self.frames[0][0] <= now:
             due, _, frame = heapq.heappop(self.frames)
             if now - due > 0.25:
                 continue
             if hasattr(frame, "bass_rms"):
-                bass_rms = frame.bass_rms; continue
+                self.bridge.bass(frame.bass_rms,due); continue
             count += 1
             if frame.spectrum is not None:
                 bands = [min(1.0, max(0.0, value / 65535)) for value in frame.spectrum]
@@ -90,8 +89,6 @@ class FrameBuffer:
                 loudness = min(1.0, max(0.0, frame.loudness / 65535))
             if frame.peak_strength is not None:
                 peak = max(peak or 0, min(1.0, max(0.0, frame.peak_strength / 255)))
-        if bass_rms is not None:
-            self.bridge.bass(bass_rms)
         if count:
             self.bridge.visualization(bands, loudness, peak)
         return count
@@ -209,7 +206,7 @@ class SendspinSource:
             self.info["audio_bytes_received"] += len(data)
             self.info["audio_format"] = audio_format
         if first:
-            LOG.info("Sendspin audio arriving at silent sink (%s); LEDs use visualizer data", audio_format)
+            LOG.info("Sendspin audio arriving at silent sink (%s); LEDs use scheduled PCM bass and visualizer data", audio_format)
 
     def player_command(self, payload):
         command = payload.player
@@ -224,7 +221,7 @@ class SendspinSource:
         client = SendspinClient(identity, "Twinkly Bridge", self.roles, pairing_store=store,
             player_support=self.player_support if self.player_enabled else None,
             artwork_support=self.artwork_support, visualizer_support=self.support, session=session,
-            device_info=DeviceInfo(product_name="Twinkly Bridge", manufacturer="Kiosk companion", software_version="0.1.6"))
+            device_info=DeviceInfo(product_name="Twinkly Bridge", manufacturer="Kiosk companion", software_version="0.1.7"))
         self.clock_client = client
         disconnected = asyncio.Event()
         client.add_artwork_listener(lambda channel, data: self.bridge.artwork(data) if channel == 0 else None)
@@ -272,7 +269,7 @@ class SendspinSource:
             "name": "Twinkly Bridge", "version": 1, "supported_roles": [role.value for role in self.roles],
             "artwork@v1_support": self.artwork_support.to_dict(),
             "visualizer@v1_support": self.support.to_dict(),
-            "device_info": {"product_name": "Twinkly Bridge", "software_version": "0.1.6"}}
+            "device_info": {"product_name": "Twinkly Bridge", "software_version": "0.1.7"}}
         state_payload = {"available": True, "state": "synchronized"}
         if self.player_enabled:
             hello_payload["player@v1_support"] = self.player_support.to_dict()

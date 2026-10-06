@@ -41,7 +41,13 @@ class ControlQueue {
     } finally { this.sending = false; }
   }
 }
-if (typeof module !== 'undefined') module.exports = {ControlQueue, readApiResponse};
+function sourceDescription(s) {
+  const source = s.sendspin || {};
+  if (!source.connected) return source.state === 'disabled' ? 'Angiv sendspin_url under konfiguration' : 'Sendspin: '+(source.state||'venter');
+  const signal = (s.spectrum_fresh ?? s.audio_fresh) ? 'Modtager visualiseringsdata' : s.bass_fresh ? 'Modtager PCM-lyd · spektrum mangler; baspuls fortsætter' : source.clock_synced ? 'Venter på musik fra gruppen' : 'Synkroniserer ur…';
+  return 'Sendspin forbundet'+(source.group?' · '+source.group:'')+'\n'+signal;
+}
+if (typeof module !== 'undefined') module.exports = {ControlQueue, readApiResponse, sourceDescription};
 if (typeof document !== 'undefined') {
   const $ = id => document.getElementById(id);
   async function request(path, data) {
@@ -77,9 +83,9 @@ if (typeof document !== 'undefined') {
       if (epoch !== controls.epoch || s.revision < controls.revision) return;
       $('status').textContent = (s.connected?'Twinkly forbundet · '+s.leds+' LED':'Twinkly ikke forbundet')+'\n'+(s.device_ip||'Angiv device_ip under konfiguration');
       const source = s.sendspin || {};
-      $('source').textContent = source.connected ? 'Sendspin forbundet'+(source.group?' · '+source.group:'')+'\n'+(s.audio_fresh?'Modtager visualiseringsdata':source.clock_synced?'Venter på musik fra gruppen':'Synkroniserer ur…') : source.state === 'disabled' ? 'Angiv sendspin_url under konfiguration' : 'Sendspin: '+(source.state||'venter');
+      $('source').textContent = sourceDescription(s);
       $('error').textContent = [s.error, source.error].filter(Boolean).join('\n');
-      $('diagnostics').textContent = 'Ønsket: '+s.mode+' · Aktiv: '+s.applied_mode+' · Gendannet realtime: '+s.recoveries+' · Frames: '+(source.frames_rendered||0)+(source.roles?.includes('player@v1')?' · Lydpakker: '+(source.audio_chunks_received||0)+' (uden lydudgang)':'')+(s.bass_fresh?' · PCM-bas aktiv':' · Spektrum-bas');
+      $('diagnostics').textContent = 'Ønsket: '+s.mode+' · Aktiv: '+s.applied_mode+' · Gendannet realtime: '+s.recoveries+' · Frames: '+(source.frames_rendered||0)+(source.roles?.includes('player@v1')?' · Lydpakker: '+(source.audio_chunks_received||0)+' (uden lydudgang)':'')+(s.bass_fresh?' · PCM-bas aktiv · Basanslag: '+(s.bass_hits||0):s.spectrum_fresh?' · Spektrum-bas':' · Intet aktuelt lydsignal');
     } catch (error) {
       $('error').textContent = error.message;
       $('status').textContent = 'Aktuel status kunne ikke hentes';

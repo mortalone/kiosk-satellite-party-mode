@@ -1,3 +1,11 @@
+# 0.1.7
+
+- Keep music patterns active from scheduled PCM bass if visualizer frames stop; show PCM reception separately from spectrum reception in ingress.
+- Inspect every 20 ms bass window instead of losing brief attacks between LED refreshes. Retain timestamped attack envelopes with a visible 100 ms high-Disco decay.
+- Sample the current audio envelope after device HTTP calls, immediately before rendering LEDs, to avoid stale pulses after a slow mode/brightness response.
+- Add a bass-hit counter and regression tests for spectrum loss, short attacks, playback timestamps, sustained tones and stale PCM.
+- This detects bass amplitude rises, not isolated kick drums or guaranteed BPM. Physical speaker/Flex timing still requires verification; the existing light-delay control remains available.
+
 # 0.1.6
 
 - Measure 45–160 Hz RMS from the already-received stereo PCM; discard the audio after analysis and schedule 20 ms bass frames against Sendspin playback time.
