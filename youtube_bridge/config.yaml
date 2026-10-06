@@ -1,0 +1,28 @@
+name: YouTube Bridge for Music Assistant
+version: "0.1.0"
+slug: youtube_bridge
+description: Search ordinary YouTube in official Music Assistant through OpenSubsonic
+url: https://github.com/mortalone/kiosk-satellite-party-mode/tree/main/youtube_bridge
+arch: [amd64, aarch64]
+startup: application
+boot: manual
+init: false
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:youtube
+ports:
+  8102/tcp: 8102
+ports_description:
+  8102/tcp: Authenticated OpenSubsonic source for Music Assistant
+options:
+  username: youtube
+  password: ""
+  search_limit: 10
+  cache_mb: 512
+  max_track_minutes: 120
+schema:
+  username: str
+  password: password
+  search_limit: int(1,30)
+  cache_mb: int(128,8192)
+  max_track_minutes: int(1,240)
