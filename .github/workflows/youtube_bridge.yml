@@ -1,0 +1,39 @@
+name: Test and build YouTube Bridge
+on:
+  push:
+    branches: [main]
+    paths: ["youtube_bridge/**", ".github/workflows/youtube_bridge.yml"]
+  pull_request:
+    paths: ["youtube_bridge/**", ".github/workflows/youtube_bridge.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: pip install -r youtube_bridge/requirements-test.txt
+      - run: python -m unittest discover -s youtube_bridge/tests -v
+      - name: Build app container
+        run: docker build --build-arg BUILD_VERSION=0.1.0 --build-arg BUILD_ARCH=amd64 -t youtube-bridge:test youtube_bridge
+      - name: Check startup and protocol inside container
+        run: |
+          mkdir /tmp/youtube-options
+          printf '%s\n' '{"username":"youtube","password":"test-password"}' > /tmp/youtube-options/options.json
+          docker run -d --name youtube-test -p 18102:8102 -v /tmp/youtube-options:/data youtube-bridge:test
+          trap 'docker logs youtube-test; docker rm -f youtube-test' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18102/health; then
+              curl --fail --silent 'http://127.0.0.1:18102/rest/ping.view?u=youtube&p=test-password&f=json' | python -c 'import json,sys; assert json.load(sys.stdin)["subsonic-response"]["status"] == "ok"'
+              docker exec youtube-test node --version
+              docker exec youtube-test python -m yt_dlp --version
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
