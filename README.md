@@ -131,3 +131,21 @@ The earlier mood-search toggle is now called **Similarity**. Enable **Vis lignen
 numre-knapper** for per-result ≈ lists, or use the current-track similar list in
 the Party menu. Artist/title identity is verified; AI musical claims and original
 release years are not always independently verifiable.
+
+
+## 0.1.10: Guest switches for Home Assistant
+
+Two additional switches are published by the plugin:
+
+- **Guest access** controls the actual guest access of the matching Music Assistant
+  Party provider/group. Its state is read back from MA and refreshed every 15
+  seconds, even when Party Mode or QR display is off. An explicitly matching
+  group and MA configuration permissions are required. Unknown/ambiguous access
+  is not published as a false off state; the switch appears after confirmation.
+- **Guest QR** controls the saved QR visibility preference. Hiding it does not
+  disable guest access; AI DJ QR selection continues to follow the existing settings.
+
+The existing **Party Mode** switch and enable/disable actions remain available.
+These are entities, using Kiosk's separate limit of 32 sensor/select/switch entities,
+not slots in the 20-setting or 20-action limits. Add the Guest access switch as a
+second toggle sub-button beside Party Mode in the existing Bubble Card.

@@ -1,8 +1,9 @@
-Party Mode 0.1.9
+Party Mode 0.1.10
 
-- Open the new Party AI DJ add-on from a DJ button and configure its address in the native Party menu.
-- Add an optional AI DJ guest QR, while preserving the MA guest QR as default.
-- Rename the old mood-search test to Similarity and add optional per-result similar-track buttons plus a current-track similar list.
-- Party AI DJ 0.1.0 supports HA AI Task or OpenAI-compatible endpoints, varied playlists, Music Assistant catalog validation, skip missing matches, preview and add/next/play.
-- Twinkly Bridge 0.1.6 isolates 45–160 Hz bass from timestamped PCM, ignores overall loudness/server peaks when PCM bass is available, and adds live synchronization offset in ingress.
-- Requires add-on/AI configuration and physical sync testing; no native MA server modifications or new player group are needed.
+- Adds a Guest access HA switch for Music Assistant's actual guest access on the explicitly matching Party player group.
+- Publishes guest access only after reading a confirmed boolean from MA. Handles MA's omitted false default. Reads back configuration after saves and does not guess off when status is unavailable, ambiguous or belongs to another group.
+- Refreshes guest access every 15 seconds, independently of QR visibility and full-screen Party Mode.
+- Adds a separate saved Guest QR switch. Hiding QR does not revoke MA access.
+- Preserves the existing Party Mode switch and enable/disable actions.
+- Switches use Kiosk's separate entity budget, without adding ordinary settings or commands.
+- Adds guest-state parsing and target-isolation regression checks.

@@ -110,6 +110,10 @@ public final class PartyModePlugin implements KioskPlugin {
     private long searchGeneration;
     private String reportedGuestStatus = "";
     private Boolean reportedPartyState;
+    private Boolean guestAccessState, reportedGuestAccess, reportedGuestQr;
+    private String guestAccessQueue = "";
+    private boolean guestStatePending;
+    private long guestStateLastPoll, guestAccessRevision;
     private String reportedPartyEffect;
     private boolean partyPollPending, partyGuestPending, partyGuestChangePending;
     private long partyLastPoll, partyLastSuccess, partyGuestLastPoll, partyGuestLastSuccess, partyLastPostpone;
@@ -125,7 +129,7 @@ public final class PartyModePlugin implements KioskPlugin {
     private final Runnable tick = new Runnable() {
         @Override public void run() {
             if (host == null || context == null) return;
-            pollMedia(); pollVisibility();
+            pollMedia(); pollVisibility(); pollGuestAccessState();
             updatePresentation();
             if (partyFullscreen) {
                 updateParty(); pollPartyQueue(); pollPartyGuests(); pollPlayerVolume(); pollPartyLyrics();
@@ -149,7 +153,7 @@ public final class PartyModePlugin implements KioskPlugin {
             context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit()
                     .putBoolean("party_fullscreen", false).putLong("party_until_ms", 0).apply();
             context.sendBroadcast(new Intent(PARTY_EVENT).setPackage(context.getPackageName()));
-            reportedPartyState = null; reportedPartyEffect = null; publishPartyState();
+            reportedPartyState = null; reportedPartyEffect = null; reportedGuestAccess = null; reportedGuestQr = null; guestAccessState = null; guestAccessQueue = ""; guestStateLastPoll = 0; publishPartyState();
             configureOnMain(settings);
             readKioskMusicAssistantConfig();
             host.executeCommand("getDashboardState", Collections.emptyMap(), (ok, data, error) -> {
@@ -246,6 +250,12 @@ public final class PartyModePlugin implements KioskPlugin {
     @Override public synchronized void onEvent(String event, Map<String, Object> payload) {
         if ("select.effect".equals(event)) {
             main.post(() -> { if (host != null && context != null) setPartyEffect(String.valueOf(payload.get("option"))); }); return;
+        }
+        if ("switch.guest_access".equals(event)) {
+            main.post(() -> { if (host != null) changePartyGuestAccess(Boolean.TRUE.equals(payload.get("on"))); }); return;
+        }
+        if ("switch.guest_qr".equals(event)) {
+            main.post(() -> { if (host != null) setPartyGuests(Boolean.TRUE.equals(payload.get("on"))); }); return;
         }
         if ("switch.active".equals(event)) {
             execute(Boolean.TRUE.equals(payload.get("on")) ? "show" : "hide", Collections.emptyMap()); return;
@@ -344,6 +354,15 @@ public final class PartyModePlugin implements KioskPlugin {
                 host.publishSelect("effect", "Party visualisering", new String[]{"off", "spectrum", "mirror", "radial", "wave", "particles", "tunnel", "lyrics", "discolyrics"}, partyEffect);
                 reportedPartyEffect = partyEffect;
             } catch (Throwable error) { host.log("Party effect select unavailable: " + error.getMessage()); }
+        }
+        if (!Boolean.valueOf(partyGuestsFollow).equals(reportedGuestQr)) {
+            try { host.publishSwitch("guest_qr", "Guest QR", partyGuestsFollow); reportedGuestQr = partyGuestsFollow; }
+            catch (Throwable error) { host.log("Guest QR switch unavailable: " + error.getMessage()); }
+        }
+        if (guestAccessState != null && guestAccessQueue.equals(attr(mediaAttributes, "active_queue", ""))
+                && !guestAccessState.equals(reportedGuestAccess)) {
+            try { host.publishSwitch("guest_access", "Guest access", guestAccessState); reportedGuestAccess = guestAccessState; }
+            catch (Throwable error) { host.log("Guest access switch unavailable: " + error.getMessage()); }
         }
         if (Boolean.valueOf(partyFullscreen).equals(reportedPartyState)) return;
         try { host.publishSwitch("active", "Party Mode", partyFullscreen); reportedPartyState = partyFullscreen; }
@@ -1007,7 +1026,7 @@ public final class PartyModePlugin implements KioskPlugin {
     private void setPartyGuests(boolean follow) {
         partyGuestsFollow = follow;
         context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit().putString("guests_follow", String.valueOf(follow)).apply();
-        clearPartyGuests(); partyGuestLastPoll = 0; updateParty();
+        clearPartyGuests(); partyGuestLastPoll = 0; publishPartyState(); updateParty();
         if (follow && partyFullscreen) pollPartyGuests();
     }
     private void setPartyQueue(boolean visible) {
@@ -1115,6 +1134,44 @@ public final class PartyModePlugin implements KioskPlugin {
         else main.post(clear);
     }
 
+    private void applyGuestAccessState(String queue, Boolean state) {
+        guestAccessQueue = queue; guestAccessState = state;
+        if (state == null && reportedGuestAccess != null) {
+            try { host.removeSwitch("guest_access"); reportedGuestAccess = null; }
+            catch (Throwable error) { host.log("Guest access status unavailable: " + error.getMessage()); }
+        }
+        publishPartyState();
+    }
+
+    private void pollGuestAccessState() {
+        if (host == null || context == null || io == null) return;
+        final String queue = attr(mediaAttributes, "active_queue", "");
+        if (!queue.equals(guestAccessQueue)) { guestAccessRevision++; applyGuestAccessState(queue, null); guestStateLastPoll = 0; }
+        if (guestStatePending || partyGuestChangePending) return;
+        long now = SystemClock.elapsedRealtime();
+        if (guestStateLastPoll != 0 && now - guestStateLastPoll < 15000) return;
+        guestStateLastPoll = now;
+        readKioskMusicAssistantConfig();
+        if (queue.isEmpty() || maBaseUrl.isEmpty() || maToken.isEmpty()) { applyGuestAccessState(queue, null); return; }
+        final String base = maBaseUrl.trim().replaceFirst("^ws:", "http:").replaceFirst("^wss:", "https:").replaceAll("/+$", "");
+        final String token = maToken;
+        final long revision = guestAccessRevision;
+        guestStatePending = true;
+        io.execute(() -> {
+            Boolean state = null;
+            try {
+                Object response = partyRequest(base, token, "config/providers", new JSONObject().put("provider_domain", "party").put("include_values", true));
+                state = PartyGuestConfig.guestAccess(response instanceof JSONArray ? (JSONArray) response : null, queue);
+            } catch (Throwable ignored) {}
+            final Boolean verified = state;
+            main.post(() -> {
+                guestStatePending = false;
+                if (host == null || revision != guestAccessRevision || partyGuestChangePending || !queue.equals(attr(mediaAttributes, "active_queue", ""))) return;
+                applyGuestAccessState(queue, verified);
+            });
+        });
+    }
+
     private void changePartyGuestAccess(boolean enabled) {
         if (partyGuestChangePending || io == null || context == null) return;
         readKioskMusicAssistantConfig();
@@ -1125,6 +1182,7 @@ public final class PartyModePlugin implements KioskPlugin {
         final String base = maBaseUrl.trim().replaceFirst("^ws:", "http:").replaceFirst("^wss:", "https:").replaceAll("/+$", "");
         final String token = maToken;
         final long generation = partyGuestGeneration;
+        guestAccessRevision++;
         partyGuestChangePending = true;
         partyGuestStatus = "Opdaterer gæsteadgang…";
         updateParty();
@@ -1142,7 +1200,11 @@ public final class PartyModePlugin implements KioskPlugin {
                     JSONObject args = new JSONObject().put("provider_domain", "party").put("instance_id", instance)
                             .put("values", new JSONObject().put("enable_guest_access", enabled));
                     Object saved = partyRequest(base, token, "config/providers/save", args);
-                    changed = saved instanceof JSONObject && instance.equals(((JSONObject) saved).optString("instance_id", ""));
+                    if (saved instanceof JSONObject && instance.equals(((JSONObject) saved).optString("instance_id", ""))) {
+                        Object verified = partyRequest(base, token, "config/providers", filter);
+                        changed = Boolean.valueOf(enabled).equals(PartyGuestConfig.guestAccess(
+                                verified instanceof JSONArray ? (JSONArray) verified : null, queue));
+                    }
                 }
             } catch (Throwable ignored) {}
             final boolean success = changed;
@@ -1150,7 +1212,10 @@ public final class PartyModePlugin implements KioskPlugin {
             main.post(() -> {
                 partyGuestChangePending = false;
                 if (host == null) return;
+                if (!queue.equals(attr(mediaAttributes, "active_queue", ""))) { pollGuestAccessState(); return; }
+                guestStateLastPoll = 0;
                 if (success) {
+                    applyGuestAccessState(queue, enabled);
                     clearPartyGuests(); partyGuestLastPoll = 0;
                     if (enabled) {
                         partyGuestsFollow = true;
@@ -1159,7 +1224,7 @@ public final class PartyModePlugin implements KioskPlugin {
                     host.status(enabled ? "MA-gæsteadgang aktiveret." : "MA-gæsteadgang deaktiveret.", false);
                     pollPartyGuests();
                 } else { partyGuestStatus = error; host.status(error, true); }
-                updateParty();
+                publishPartyState(); pollGuestAccessState(); updateParty();
             });
         });
     }
