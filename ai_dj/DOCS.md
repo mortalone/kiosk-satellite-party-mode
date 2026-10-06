@@ -80,7 +80,36 @@ Automations kan kalde API'en med header `Authorization: Bearer DIT_API_TOKEN`:
 2. `GET /api/jobs/<id>` indtil `state` er `ready` eller `error`.
 3. `POST /api/queue` med `{"id":"…","option":"next","indices":[0,1,2]}`.
 
-`add` = sidst i køen, `next` = efter den aktuelle sang, `play` = afspil nu. Ingen
+`add` = sidst i køen uden at starte afspilning, `next` = som næste, `play` = afspil nu og behold resten, `replace_next` = erstat kommende numre og behold den aktuelle sang, `replace` = erstat hele køen og spil nu. MA kan bevare en allerede bufferet overgang. `replace` kræver `confirm_replace: true`. Ingen
 forespørgsel kan vælge en anden gruppe eller indsende vilkårlige track-URI'er. Et
 forslag udløber efter 30 minutter og kan kun tilføjes én gang. Google-højttalernes
 frie tale-input er endnu ikke koblet på; API'en er den fælles indgang til dette.
+
+## Kontinuerlig DJ (0.1.2)
+
+Åbn ingress-siden i HA, skriv dit ønske og vælg **Køvalg**. Tryk **Start kontinuerlig DJ**.
+Det valgte køvalg gælder kun første portion. Derefter tilføjes nye portioner **sidst**,
+så gæsternes og dine eksisterende køvalg bevares. Vælg **Spil nu** eller **Erstat hele
+køen og spil nu**, hvis DJ'en også skal starte musikken. Standardvalget **Tilføj sidst**
+starter ikke afspilningen. En kø, der allerede har mange numre foran, fyldes først op,
+når den bliver kort. Ved shuffle styrer MA rækkefølgen og kan blande nye numre ind.
+
+DJ'en kontrollerer køen hvert 20. sekund, finder højst 8 numre ad gangen og fylder mod
+8 numre foran, når højst 3 er tilbage. AI-forespørgsler startes højst cirka hvert 2.
+minut, og kun når der skal fyldes op. Katalogmatches kontrolleres som før. De seneste
+500 DJ-numre og den nærmeste eksisterende kø udelukkes; AI får også besked om at variere
+kunstnere og vælge nye indspilninger. Modellen kan stadig foreslå for få nye matches.
+Ved fejl eller manglende matches vises årsagen, og DJ'en prøver igen efter 2 minutter.
+Dette er ikke en garanti for uafbrudt musik ved AI-/MA-nedbrud eller en tom musikkilde.
+
+Den kan køre, mens siden er lukket, indtil **Stop DJ** eller add-on'en genstartes.
+Pause/stop af afspilleren suspenderer påfyldning; DJ'en genstarter ikke en manuelt
+stoppet afspiller. Når du spiller igen, fortsætter påfyldningen. Stop DJ bevarer de
+numre, som allerede er tilføjet, og afviser et AI-resultat, der endnu ikke er indsat.
+Efter genstart af add-on'en skal kontinuerlig DJ aktiveres igen.
+
+Kontinuerlig DJ startes og stoppes kun fra HA ingress. Gæster kan fortsat lave og
+indsætte almindelige DJ-forslag; gæste-tokenet kan ikke starte en vedvarende DJ eller
+ændre AI-indstillinger. Host-API: `GET/POST /api/admin/radio`, POST med
+`{"action":"start","prompt":"varieret rolig jazz","option":"add"}` eller
+`{"action":"stop"}`. Et nyt musikønske kræver stop og start igen.

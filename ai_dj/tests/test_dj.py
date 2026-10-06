@@ -58,6 +58,7 @@ class TestDJ(unittest.TestCase):
             self.assertEqual(requests.get(base+'/health',timeout=2).status_code,200)
             self.assertEqual(requests.post(base+'/api/suggest',json={'prompt':'jazz'},timeout=2).status_code,401)
             self.assertEqual(requests.get(base+'/api/jobs/missing',headers={'Authorization':'Bearer '+'a'*32},timeout=2).status_code,400)
+            self.assertEqual(requests.post(base+'/api/admin/radio',json={'action':'start','prompt':'Jazz'},headers={'Authorization':'Bearer '+'a'*32},timeout=2).status_code,403)
             self.assertEqual(requests.get(base+'/api/admin/ai',headers={'Authorization':'Bearer '+'a'*32},timeout=2).status_code,403)
             self.assertEqual(requests.post(base+'/api/admin/ai',json={'entity_id':'ai_task.example'},headers={'Authorization':'Bearer '+'a'*32},timeout=2).status_code,403)
         finally:server.shutdown();server.server_close()
@@ -92,3 +93,20 @@ class TestDJ(unittest.TestCase):
         dj.ha_get.assert_called_once_with('states/media_player.stueetagen_visualizer')
         self.assertEqual(transport.call_args.args[2]['args']['queue_id'],'ugp_existing')
         dj.worker.shutdown()
+
+    def test_replace_requires_explicit_confirmation(self):
+        transport=Mock(return_value=None);dj=DJ({'queue_id':'group','music_assistant_url':'http://ma'},transport)
+        dj.jobs['test']={'id':'test','created':time.monotonic(),'state':'ready','queued':False,'tracks':[track('A','B')]}
+        with self.assertRaisesRegex(ValueError,'Bekræft'):dj.enqueue({'id':'test','option':'replace'})
+        transport.assert_not_called()
+        dj.enqueue({'id':'test','option':'replace','confirm_replace':True})
+        self.assertEqual(transport.call_args.args[2]['args']['option'],'replace');dj.worker.shutdown()
+    def test_continuous_exclusion_skips_recent_pair_before_catalog_lookup(self):
+        transport=Mock(return_value={'tracks':[track('C','New','test://track/2')]})
+        dj=DJ({'music_assistant_url':'http://ma'},transport)
+        dj.generate=Mock(return_value=[{'artist':'A','title':'Old','year':1997},{'artist':'C','title':'New','year':1997}])
+        key=dj.suggest({'prompt':'1997','count':2},exclude=[{'artist':'A','title':'Old','uri':'test://track/old'}])['id']
+        deadline=time.monotonic()+3
+        while dj.job(key)['state']=='working' and time.monotonic()<deadline:time.sleep(.02)
+        self.assertEqual(len(dj.job(key)['tracks']),1)
+        self.assertEqual(transport.call_count,1);dj.worker.shutdown()

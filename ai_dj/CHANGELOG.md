@@ -1,3 +1,12 @@
+# 0.1.2
+
+- Show queue placement before search: add, next, play now, replace upcoming, replace all. Replace all requires explicit confirmation.
+- Add host-controlled continuous DJ: rolling batches of at most 8, check queue every 20s, refill when 3 or fewer tracks remain, two-minute generation/retry spacing.
+- Exclude recent DJ tracks and queued items; pass recent artist/title pairs to the AI for variety.
+- Suspend on player pause/stop; retain queue when stopping DJ and never enqueue a stale in-flight result after stop. Remain off after add-on restart.
+- Restrict persistent DJ controls to HA ingress; authenticated guests retain one-shot queue actions.
+- Test 24 hours of simulated playback, stop during generation, pause/resume, full queues, bounded retries, repeat exclusion and replacement confirmation.
+
 # 0.1.1
 
 - Add an ingress-only selector for existing HA AI Task entities supporting text generation. Persist selection across restarts; guest API cannot list or change HA AI settings.
