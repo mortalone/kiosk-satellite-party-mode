@@ -79,6 +79,11 @@ if (typeof document !== 'undefined') {
     try {
       const s = await request('api/status');
       controls.accept(s, epoch);
+      const trace = s.diagnostic || {};
+      $('traceStatus').textContent = trace.active ? 'Måler · '+trace.remaining_s+' sek. tilbage · '+trace.events+' hændelser' : trace.available ? 'Måling klar · '+trace.events+' hændelser'+(trace.truncated?' · hukommelsesgrænse nået':'') : 'Ingen måling startet';
+      $('traceStop').disabled = !trace.active;
+      $('traceDownload').disabled = !trace.available;
+
       // Status from before a command must not announce its old mode or clear errors.
       if (epoch !== controls.epoch || s.revision < controls.revision) return;
       $('status').textContent = (s.connected?'Twinkly forbundet · '+s.leds+' LED':'Twinkly ikke forbundet')+'\n'+(s.device_ip||'Angiv device_ip under konfiguration');
@@ -110,5 +115,19 @@ if (typeof document !== 'undefined') {
       }, 100);
     });
   }
+  for (const [id, action] of [['traceStart','start'],['traceStop','stop']]) {
+    $(id).addEventListener('click', async () => {
+      try { await request('api/diagnostic', {action}); await refresh(); }
+      catch (error) { $('error').textContent = error.message; }
+    });
+  }
+  $('traceDownload').addEventListener('click', async () => {
+    try {
+      const data = await request('api/diagnostic');
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data)], {type:'application/json'}));
+      const link = document.createElement('a'); link.href = url; link.download = 'twinkly-maaling.json';
+      document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) { $('error').textContent = error.message; }
+  });
   refresh(); setInterval(refresh, 2000);
 }

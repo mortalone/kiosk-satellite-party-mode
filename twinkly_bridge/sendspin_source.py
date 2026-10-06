@@ -62,11 +62,16 @@ class FrameBuffer:
 
     def clear(self):
         self.frames.clear()
+        self.bridge.diagnostic.add("clear")
         self.bridge.clear_audio()
 
     def add(self, frame, due, now=None):
         now = time.monotonic() if now is None else now
-        if due < now or due > now + 30 or len(self.frames) >= self.maximum:
+        reason = "past_due" if due < now else "too_far" if due > now+30 else "full" if len(self.frames)>=self.maximum else ""
+        self.bridge.diagnostic.add("schedule", role="pcm" if hasattr(frame,"bass_rms") else "visualizer",
+            timestamp_us=frame.timestamp_us, lead_ms=round((due-now)*1000,3),
+            accepted=not bool(reason), reason=reason, queued=len(self.frames))
+        if reason:
             return False
         self.serial += 1
         heapq.heappush(self.frames, (due, self.serial, frame))
@@ -79,6 +84,8 @@ class FrameBuffer:
         while self.frames and self.frames[0][0] <= now:
             due, _, frame = heapq.heappop(self.frames)
             if now - due > 0.25:
+                self.bridge.diagnostic.add("drop", role="pcm" if hasattr(frame,"bass_rms") else "visualizer",
+                    reason="late_render", age_ms=round((now-due)*1000,3))
                 continue
             if hasattr(frame, "bass_rms"):
                 self.bridge.bass(frame.bass_rms,due); continue
@@ -178,6 +185,7 @@ class SendspinSource:
         value = milliseconds / 1000
         def apply():
             shift = value - self.delay; self.delay = value
+            self.bridge.diagnostic.add("delay", milliseconds=milliseconds, shifted_frames=len(self.buffer.frames))
             self.buffer.frames = [(due+shift, serial, frame) for due,serial,frame in self.buffer.frames]
             heapq.heapify(self.buffer.frames)
         if self.loop is not None: self.loop.call_soon_threadsafe(apply)
@@ -221,7 +229,7 @@ class SendspinSource:
         client = SendspinClient(identity, "Twinkly Bridge", self.roles, pairing_store=store,
             player_support=self.player_support if self.player_enabled else None,
             artwork_support=self.artwork_support, visualizer_support=self.support, session=session,
-            device_info=DeviceInfo(product_name="Twinkly Bridge", manufacturer="Kiosk companion", software_version="0.1.7"))
+            device_info=DeviceInfo(product_name="Twinkly Bridge", manufacturer="Kiosk companion", software_version="0.1.8"))
         self.clock_client = client
         disconnected = asyncio.Event()
         client.add_artwork_listener(lambda channel, data: self.bridge.artwork(data) if channel == 0 else None)
@@ -269,7 +277,7 @@ class SendspinSource:
             "name": "Twinkly Bridge", "version": 1, "supported_roles": [role.value for role in self.roles],
             "artwork@v1_support": self.artwork_support.to_dict(),
             "visualizer@v1_support": self.support.to_dict(),
-            "device_info": {"product_name": "Twinkly Bridge", "software_version": "0.1.7"}}
+            "device_info": {"product_name": "Twinkly Bridge", "software_version": "0.1.8"}}
         state_payload = {"available": True, "state": "synchronized"}
         if self.player_enabled:
             hello_payload["player@v1_support"] = self.player_support.to_dict()

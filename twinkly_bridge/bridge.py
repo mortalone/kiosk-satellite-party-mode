@@ -13,6 +13,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from bass import BassEnvelope
+from diagnostic import Diagnostic
 
 LOG = logging.getLogger("twinkly_bridge")
 MODES = {"color", "rainbow", "chase", "music", "off", "restore", "mood"}
@@ -234,6 +235,7 @@ class Bridge:
                          "cover_colors": options.get("cover_colors", False),
                          "pattern": options.get("music_pattern", "mirror"), "gain": 1.0,
                          "punch": validate_control({"punch": options.get("music_punch", 50)})["punch"]}
+        self.diagnostic = Diagnostic()
         self.factory = factory
         self.lock = threading.Lock()
         self.wake = threading.Event()
@@ -261,6 +263,7 @@ class Bridge:
             self.settings.update(update)
             self.revision += 1
         if "light_delay_ms" in update and self.sendspin is not None: self.sendspin.set_delay(update["light_delay_ms"])
+        self.diagnostic.add("control", settings=update)
         self.wake.set()
         return self.status()
 
@@ -277,12 +280,16 @@ class Bridge:
                 self.loudness = loudness
             if peak is not None:
                 self.peak = peak
+            self.diagnostic.add("spectrum", bands=bands, loudness=loudness, peak=peak)
 
     def bass(self, rms, at=None):
         at=time.monotonic() if at is None else at
         with self.lock:
             self.bass_rms, self.bass_at = rms, at
-            if self.bass_envelope.feed(rms,at): self.bass_hits+=1
+            hit = self.bass_envelope.feed(rms,at)
+            if hit: self.bass_hits+=1
+            self.diagnostic.add("bass", rms=rms, baseline=self.bass_envelope.baseline,
+                                hit=hit, hits=self.bass_hits, scheduled_age_ms=round((time.monotonic()-at)*1000,3))
 
     def clear_audio(self):
         with self.lock:
@@ -308,6 +315,7 @@ class Bridge:
                     "bass_pulse": self.bass_envelope.pulse(time.monotonic(),self.settings["punch"]),
                     "spectrum_fresh": time.monotonic() - self.bands_at < 1.5,
                     "audio_fresh": time.monotonic() - self.bands_at < 1.5 or time.monotonic()-self.bass_at < .2}
+        result["diagnostic"] = self.diagnostic.status()
         result["sendspin"] = self.sendspin.status() if self.sendspin else {"connected": False, "state": "disabled"}
         return result
 
@@ -398,7 +406,17 @@ class Bridge:
                                               settings["pattern"], level, peak,
                                               settings["punch"], pulse, modulation,
                                               palette if settings["cover_colors"] or mode == "mood" else None)
-                        device.show_rt_frame([device.make_pixel(*rgb) for rgb in colors])
+                        pixels = [device.make_pixel(*rgb) for rgb in colors]
+                        sent_at = time.monotonic()
+                        device.show_rt_frame(pixels)
+                        if self.diagnostic.active:
+                            self.diagnostic.add("led", mode=mode, pattern=settings["pattern"],
+                                bass_source="pcm" if bass_rms is not None else "spectrum" if bands else "none",
+                                pulse=pulse, brightness_max=max(max(rgb) for rgb in colors),
+                                brightness_mean=round(sum(sum(rgb) for rgb in colors)/(3*len(colors)),3),
+                                configured_brightness=settings["brightness"],
+                                send_ms=round((time.monotonic()-sent_at)*1000,3),
+                                audio_read_age_ms=round((sent_at-now)*1000,3))
                     applied_revision = revision
                     with self.lock:
                         self.info.update(error="", applied_mode=mode)
@@ -472,6 +490,8 @@ def handler_for(bridge, ingress=False):
                 self.reply(200, Path(__file__).with_name("ui.js").read_bytes(), "text/javascript; charset=utf-8")
             elif self.path == "/health":
                 self.reply(200, {"running": True})
+            elif self.path == "/api/diagnostic" and self.authorized():
+                self.reply(200, bridge.diagnostic.export())
             elif self.path == "/api/status" and self.authorized():
                 self.reply(200, bridge.status())
             else:
@@ -488,6 +508,15 @@ def handler_for(bridge, ingress=False):
                 data = json.loads(self.rfile.read(size))
                 if not isinstance(data, dict):
                     raise ValueError("Expected an object")
+                if self.path == "/api/diagnostic":
+                    if data.get("action") == "start":
+                        with bridge.lock:
+                            metadata = dict(version="0.1.8", settings=dict(bridge.settings), fps=bridge.fps)
+                        bridge.diagnostic.start(metadata)
+                    elif data.get("action") == "stop": bridge.diagnostic.stop()
+                    else: raise ValueError("Expected start or stop")
+                    self.reply(202, bridge.diagnostic.status())
+                    return
                 if self.path == "/api/control":
                     status = bridge.control(data)
                     self.reply(202, status)

@@ -1,3 +1,11 @@
+# 0.1.8
+
+- Add opt-in 60-second diagnostic capture and JSON download in the control panel; auto-stop without keeping the browser open.
+- Record PCM bass decisions and baseline, visualizer features, scheduling lead/drop reasons, setting changes and LED-send brightness/timing on the same monotonic timeline.
+- Bound capture to 12,000 events in memory. No raw audio, album images, track metadata or credentials are recorded; restart clears the capture.
+- Keep the current bass detector unchanged so comparisons are reproducible. Sending a frame is not a measurement of emitted light or heard speaker timing.
+- Tests cover timeout, explicit stop, restart, memory limit, actual detector decisions and authenticated export without secrets.
+
 # 0.1.7
 
 - Keep music patterns active from scheduled PCM bass if visualizer frames stop; show PCM reception separately from spectrum reception in ingress.

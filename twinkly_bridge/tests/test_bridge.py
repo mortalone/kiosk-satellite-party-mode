@@ -215,6 +215,19 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.request("/api/control", [1])[0], 400)
         self.assertEqual(self.request("/api/unknown", {})[0], 404)
 
+    def test_diagnostic_export_authorization_and_secret_exclusion(self):
+        self.assertEqual(self.request('/api/diagnostic', {'action':'start'}, token='wrong')[0],401)
+        self.assertEqual(self.request('/api/diagnostic', token='wrong')[0],401)
+        self.assertEqual(self.request('/api/diagnostic', {'action':'bad'})[0],400)
+        self.assertEqual(self.request('/api/diagnostic', {'action':'start'})[0],202)
+        self.bridge.bass(.01)
+        self.request('/api/diagnostic', {'action':'stop'})
+        code,data=self.request('/api/diagnostic')
+        self.assertEqual(code,200);self.assertFalse(data['active'])
+        self.assertEqual(data['events'][0]['kind'],'bass')
+        self.assertNotIn('test-secret',json.dumps(data))
+        self.assertNotIn('api_token',json.dumps(data))
+
     def test_ingress_rejects_other_peers_even_with_api_token(self):
         ingress = ThreadingHTTPServer(("127.0.0.1", 0), handler_for(self.bridge, ingress=True))
         thread = threading.Thread(target=ingress.serve_forever, daemon=True)

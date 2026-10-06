@@ -215,3 +215,32 @@ konfigurationen for at bevare den efter genstart.
 
 Konstant bas giver ikke nødvendigvis tydelige pulser. Dette er basanslag, ikke
 perfekt adskillelse af stortromme fra basguitar eller en konstrueret beat-clock.
+
+## Kort måling (0.1.8)
+
+Åbn betjeningssiden og find **Kort måling**. Start en 60-sekunders måling,
+mens det problematiske nummer spiller. Optag samtidig Flexen med mobilens
+kamera og lyd; hold telefonen stille og undgå helt hvid/overbelyst LED-stribe.
+Tryk **Stop måling**, eller vent til den stopper automatisk. Tryk derefter
+**Hent måling · JSON**. Ingen bærbar eller mikrofon på HA-maskinen er nødvendig
+for denne fremgangsmåde. Optagelsen bliver ikke automatisk sammenkoblet med JSON-filen.
+
+Målingen indeholder afledte niveauer og tidsstempler, ikke selve lyden.
+`bass` viser RMS, baseline og hit-beslutning. `spectrum` viser serverens
+visualiseringsdata. `schedule` viser tid til planlagt afspilning og om en
+ramme afvises, fx fordi negativ lysforsinkelse gør den for gammel ved ankomst.
+`led` viser puls, lydkilde, lysstyrke før Twinklys globale dæmpning og tid brugt
+på afsendelsen. `t_ms` er tid fra målingens start på add-on'ens monotone ur.
+En `led`-hændelse betyder afsluttet afsendelse, ikke bekræftet fysisk lys.
+
+Målingen er slået fra som standard, stopper efter 60 sekunder eller 12.000
+hændelser og gemmes kun i hukommelsen indtil ny måling eller genstart.
+Automatisk kalibrering med telefonens mikrofon/kamera er ikke implementeret.
+En mikrofon kan måle den hørbare musik; kamera eller lyssensor er nødvendigt
+for også at måle det fysiske lys.
+
+Detektoren i 0.1.8 måler stigninger i 45–160 Hz RMS; den isolerer ikke stortrommen.
+Relevante metoder til videre afprøvning er [spektrale onset-funktioner](https://essentia.upf.edu/reference/streaming_OnsetDetection.html)
+og [harmonisk/perkussiv separation](https://librosa.org/doc/0.11.0/generated/librosa.decompose.hpss.html).
+De kan hjælpe med at skelne toneinstrumenter og slag, men garanterer ikke
+stortrommegenkendelse og skal afprøves med flere forskellige musiktyper.
