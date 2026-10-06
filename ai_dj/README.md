@@ -22,13 +22,13 @@ højst to pr. kunstner, og undersøger reserveforslag, hvis numre mangler.
    til gæste- eller Party-skærmen.
 4. `queue_id`: MA's id for din **eksisterende universelle gruppe**. Se gruppens MA
    media_player-attribut `active_queue` i HA Udviklerværktøjer → Tilstande. Brug id'et,
-   ikke HA's `media_player.…` entity-id. Du skal ikke oprette en ny Pi/Twinkly-gruppe.
+   eller angiv gruppens HA `media_player.…` entity-id; DJ'en læser så `active_queue` ved køvalg. Du skal ikke oprette en ny Pi/Twinkly-gruppe.
 5. Vælg AI-motor, start add-on og åbn dens ingress-side.
 
 ## AI-motor
 
 **HA AI Task**: `ai_engine: ha_task`. Udfyld `ai_task_entity`, fx den Gemini-entity,
-som du allerede bruger til “kald på”. Tomt felt bruger HA's standard AI Task.
+som du allerede bruger til “kald på”. Du kan i stedet åbne ingress-siden, folde **AI i Home Assistant** ud og vælge modellen i listen. Valget gemmes i add-on'ens data og gælder også gæster. Det tilsidesætter `ai_task_entity` indtil du vælger en anden model i ingress. Et tomt felt kræver nu et eksplicit valg; DJ'en kalder ikke en ukendt HA-standard.
 Add-on'en bruger Supervisors adgang til HA, så der skal ikke indtastes et HA-token.
 
 **OpenAI Compatible**: `ai_engine: openai_compatible`. Udfyld:

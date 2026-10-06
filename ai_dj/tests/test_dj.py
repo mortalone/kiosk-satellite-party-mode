@@ -3,6 +3,8 @@ import sys
 import time
 import unittest
 import threading
+import tempfile
+from unittest.mock import Mock
 import requests
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -56,8 +58,37 @@ class TestDJ(unittest.TestCase):
             self.assertEqual(requests.get(base+'/health',timeout=2).status_code,200)
             self.assertEqual(requests.post(base+'/api/suggest',json={'prompt':'jazz'},timeout=2).status_code,401)
             self.assertEqual(requests.get(base+'/api/jobs/missing',headers={'Authorization':'Bearer '+'a'*32},timeout=2).status_code,400)
+            self.assertEqual(requests.get(base+'/api/admin/ai',headers={'Authorization':'Bearer '+'a'*32},timeout=2).status_code,403)
+            self.assertEqual(requests.post(base+'/api/admin/ai',json={'entity_id':'ai_task.example'},headers={'Authorization':'Bearer '+'a'*32},timeout=2).status_code,403)
         finally:server.shutdown();server.server_close()
         server=ThreadingHTTPServer(('127.0.0.1',0),handler(dj,True))
         threading.Thread(target=server.serve_forever,daemon=True).start()
         try:self.assertEqual(requests.get('http://127.0.0.1:'+str(server.server_port)+'/',timeout=2).status_code,401)
         finally:server.shutdown();server.server_close();dj.worker.shutdown()
+
+    def test_ai_selection_filters_capability_and_persists(self):
+        states=[{'entity_id':'ai_task.google_ai_task','state':'unknown','attributes':{'friendly_name':'Google AI','supported_features':1}},
+                {'entity_id':'ai_task.images','attributes':{'supported_features':2}},
+                {'entity_id':'ai_task.offline','state':'unavailable','attributes':{'supported_features':1}},
+                {'entity_id':'conversation.example','attributes':{'supported_features':1}}]
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'selection.json';dj=DJ({},selection_path=path);dj.ha_get=Mock(return_value=states)
+            self.assertEqual(len(dj.ai_choices()['entities']),2)
+            with self.assertRaises(ValueError):dj.select_ai({'entity_id':'ai_task.offline'})
+            dj.select_ai({'entity_id':'ai_task.google_ai_task'})
+            restored=DJ({},selection_path=path)
+            self.assertEqual(restored.options['ai_task_entity'],'ai_task.google_ai_task')
+            self.assertEqual(restored.options['ai_engine'],'ha_task')
+            dj.worker.shutdown();restored.worker.shutdown()
+    def test_empty_ai_entity_is_actionable_without_calling_ha(self):
+        transport=Mock();dj=DJ({},transport)
+        with self.assertRaisesRegex(ValueError,'Vælg din HA AI Task'):dj.generate('jazz',2)
+        transport.assert_not_called();dj.worker.shutdown()
+    def test_ha_player_resolves_active_queue(self):
+        transport=Mock(return_value=None);dj=DJ({'queue_id':'media_player.stueetagen_visualizer','music_assistant_url':'http://ma'},transport)
+        dj.ha_get=Mock(return_value={'attributes':{'active_queue':'ugp_existing'}})
+        dj.jobs['test']={'id':'test','created':time.monotonic(),'state':'ready','queued':False,'tracks':[track('A','B')]}
+        dj.enqueue({'id':'test','option':'add'})
+        dj.ha_get.assert_called_once_with('states/media_player.stueetagen_visualizer')
+        self.assertEqual(transport.call_args.args[2]['args']['queue_id'],'ugp_existing')
+        dj.worker.shutdown()

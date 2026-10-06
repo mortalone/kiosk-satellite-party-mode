@@ -1,5 +1,5 @@
 name: Party AI DJ
-version: "0.1.0"
+version: "0.1.1"
 slug: party_ai_dj
 description: AI playlists with verified Music Assistant catalog matches and queue preview
 url: https://github.com/mortalone/kiosk-satellite-party-mode/tree/main/ai_dj
@@ -30,8 +30,8 @@ schema:
   music_assistant_token: password
   queue_id: str
   ai_engine: list(ha_task|openai_compatible)
-  ai_task_entity: str
+  ai_task_entity: str?
   openai_base_url: str
-  openai_model: str
-  openai_api_key: password
-  api_token: password
+  openai_model: str?
+  openai_api_key: password?
+  api_token: password?
