@@ -22,6 +22,8 @@ from aiosendspin.models.visualizer import ClientHelloVisualizerSpectrum, ClientH
 from aiosendspin.noise.keys import Identity, b64url_decode
 from aiosendspin.noise.trust_store import FileClientPairingStore
 
+from bass import PcmBass
+
 LOG = logging.getLogger("sendspin_source")
 
 
@@ -74,10 +76,13 @@ class FrameBuffer:
         now = time.monotonic() if now is None else now
         bands, loudness, peak = None, None, None
         count = 0
+        bass_rms = None
         while self.frames and self.frames[0][0] <= now:
             due, _, frame = heapq.heappop(self.frames)
             if now - due > 0.25:
                 continue
+            if hasattr(frame, "bass_rms"):
+                bass_rms = frame.bass_rms; continue
             count += 1
             if frame.spectrum is not None:
                 bands = [min(1.0, max(0.0, value / 65535)) for value in frame.spectrum]
@@ -85,6 +90,8 @@ class FrameBuffer:
                 loudness = min(1.0, max(0.0, frame.loudness / 65535))
             if frame.peak_strength is not None:
                 peak = max(peak or 0, min(1.0, max(0.0, frame.peak_strength / 255)))
+        if bass_rms is not None:
+            self.bridge.bass(bass_rms)
         if count:
             self.bridge.visualization(bands, loudness, peak)
         return count
@@ -120,6 +127,9 @@ class SendspinSource:
             types=["spectrum", "loudness", "peak"],
             spectrum=ClientHelloVisualizerSpectrum(n_disp_bins=32, scale="log", f_min=40, f_max=16000))
         self.buffer = FrameBuffer(bridge)
+        self.bass_analyzer = PcmBass()
+        self.clock_client = None
+        self.loop = None
         self.stopping = threading.Event()
         self.lock = threading.Lock()
         self.info = {"connected": False, "state": "waiting" if self.url else "disabled", "error": "",
@@ -145,7 +155,7 @@ class SendspinSource:
         if state is not None:
             values["playback"] = state
             if state != "playing":
-                self.buffer.clear()
+                self.clear_stream()
         self.update(**values)
 
     async def render(self):
@@ -167,9 +177,29 @@ class SendspinSource:
                 with self.lock:
                     self.info["frames_received"] += 1
 
+    def set_delay(self, milliseconds):
+        value = milliseconds / 1000
+        def apply():
+            shift = value - self.delay; self.delay = value
+            self.buffer.frames = [(due+shift, serial, frame) for due,serial,frame in self.buffer.frames]
+            heapq.heapify(self.buffer.frames)
+        if self.loop is not None: self.loop.call_soon_threadsafe(apply)
+        else: apply()
+
+    def clear_stream(self):
+        self.buffer.clear(); self.bass_analyzer.reset()
+
+    def analyze_pcm(self, data, timestamp, rate, channels, bits, due):
+        for frame in self.bass_analyzer.feed(data, timestamp, rate, channels, bits):
+            self.buffer.add(frame, due(frame.timestamp_us))
+
     def receive_audio(self, timestamp, data, audio_format):
-        """Consume audio immediately; only visualizer frames drive the LEDs."""
+        """Discard PCM after measuring its timestamped bass envelope."""
         pcm = audio_format.pcm_format
+        if self.clock_client is not None and self.clock_client.is_time_synchronized():
+            client = self.clock_client
+            self.analyze_pcm(data, timestamp, pcm.sample_rate, pcm.channels, pcm.bit_depth,
+                lambda stamp: time.monotonic()+(client.compute_play_time(stamp)-client.now_us())/1e6+self.delay)
         self.count_audio(data, f"{audio_format.codec.value} · {pcm.sample_rate} Hz · {pcm.channels} kanaler · {pcm.bit_depth} bit")
 
     def count_audio(self, data, audio_format):
@@ -194,7 +224,8 @@ class SendspinSource:
         client = SendspinClient(identity, "Twinkly Bridge", self.roles, pairing_store=store,
             player_support=self.player_support if self.player_enabled else None,
             artwork_support=self.artwork_support, visualizer_support=self.support, session=session,
-            device_info=DeviceInfo(product_name="Twinkly Bridge", manufacturer="Kiosk companion", software_version="0.1.5"))
+            device_info=DeviceInfo(product_name="Twinkly Bridge", manufacturer="Kiosk companion", software_version="0.1.6"))
+        self.clock_client = client
         disconnected = asyncio.Event()
         client.add_artwork_listener(lambda channel, data: self.bridge.artwork(data) if channel == 0 else None)
         client.add_visualizer_listener(lambda frames: self.receive(frames, client))
@@ -202,8 +233,8 @@ class SendspinSource:
             client.add_audio_chunk_listener(self.receive_audio)
             client.add_server_command_listener(self.player_command)
         client.add_group_update_listener(self.group_update)
-        client.add_stream_clear_listener(lambda roles: self.buffer.clear() if roles is None or any(r.startswith("visualizer") for r in roles) else None)
-        client.add_stream_end_listener(lambda roles: self.buffer.clear() if roles is None or any(r.startswith("visualizer") for r in roles) else None)
+        client.add_stream_clear_listener(lambda roles: self.clear_stream() if roles is None or any(r.startswith(("player", "visualizer")) for r in roles) else None)
+        client.add_stream_end_listener(lambda roles: self.clear_stream() if roles is None or any(r.startswith(("player", "visualizer")) for r in roles) else None)
         client.add_disconnect_listener(disconnected.set)
         try:
             await asyncio.wait_for(client.connect(self.url), timeout=15)
@@ -235,12 +266,13 @@ class SendspinSource:
         clock = SendspinTimeFilter()
         synced, active, bins = False, False, 32
         audio_active, audio_format = False, ""
+        audio_config = {}
         now_us = lambda: time.monotonic_ns() // 1000
         hello_payload = {"client_id": identity.peer_id,
             "name": "Twinkly Bridge", "version": 1, "supported_roles": [role.value for role in self.roles],
             "artwork@v1_support": self.artwork_support.to_dict(),
             "visualizer@v1_support": self.support.to_dict(),
-            "device_info": {"product_name": "Twinkly Bridge", "software_version": "0.1.5"}}
+            "device_info": {"product_name": "Twinkly Bridge", "software_version": "0.1.6"}}
         state_payload = {"available": True, "state": "synchronized"}
         if self.player_enabled:
             hello_payload["player@v1_support"] = self.player_support.to_dict()
@@ -273,6 +305,7 @@ class SendspinSource:
                             config = payload["player"]
                             if config.get("codec") != "pcm":
                                 raise ValueError("Unsupported audio codec at silent sink")
+                            audio_config = config
                             audio_active = True
                             audio_format = f"pcm · {config.get('sample_rate')} Hz · {config.get('channels')} kanaler · {config.get('bit_depth')} bit"
                         if payload.get("visualizer"):
@@ -285,10 +318,10 @@ class SendspinSource:
                         roles = payload.get("roles")
                         if kind == "stream/end" and (roles is None or any(r.startswith("player") for r in roles)):
                             audio_active = False
-                        if roles is None or any(r.startswith("visualizer") for r in roles):
-                            self.buffer.clear()
-                            if kind == "stream/end":
-                                active = False
+                        if roles is None or any(r.startswith(("player", "visualizer")) for r in roles):
+                            self.clear_stream()
+                        if kind == "stream/end" and (roles is None or any(r.startswith("visualizer") for r in roles)):
+                            active = False
                     elif kind == "group/update":
                         self.group_update(GroupUpdateServerPayload.from_dict(payload))
                     elif kind == "server/command" and self.player_enabled and payload.get("player"):
@@ -301,6 +334,10 @@ class SendspinSource:
                         self.bridge.artwork(message.data[9:]); continue
                     if self.player_enabled and audio_active and len(message.data) >= 9 and message.data[0] == 4:
                         self.count_audio(message.data[9:], audio_format)
+                        if synced:
+                            self.analyze_pcm(message.data[9:], struct.unpack(">q", message.data[1:9])[0],
+                                audio_config.get("sample_rate",0), audio_config.get("channels",0), audio_config.get("bit_depth",0),
+                                lambda stamp: clock.compute_client_time(stamp)/1e6+self.delay)
                         continue
                     if not synced or not active:
                         continue
@@ -318,6 +355,7 @@ class SendspinSource:
             await socket.close()
 
     async def run(self):
+        self.loop = asyncio.get_running_loop()
         if not self.url:
             return
         renderer = asyncio.create_task(self.render())
@@ -359,7 +397,7 @@ class SendspinSource:
                         # Do not expose the URL/query or credentials from library exceptions.
                         self.update(error=f"{type(exc).__name__}: Kontrollér Sendspin-adresse og protokol")
                     finally:
-                        self.buffer.clear()
+                        self.clear_stream()
                         self.update(connected=False, state="reconnecting", clock_synced=False, playback="", group="")
                     for _ in range(25):
                         if self.stopping.is_set():
@@ -371,7 +409,7 @@ class SendspinSource:
         finally:
             renderer.cancel()
             await asyncio.gather(renderer, return_exceptions=True)
-            self.buffer.clear()
+            self.clear_stream()
 
     def start(self):
         self.thread.start()

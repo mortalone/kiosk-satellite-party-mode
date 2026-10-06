@@ -402,6 +402,12 @@ public final class PartyModePlugin implements KioskPlugin {
             sp.topMargin = dp(10); sp.leftMargin = dp(12); root.addView(search, sp);
             search.setOnClickListener(v -> showSearch());
         }
+        if (allowSearch) {
+            TextView dj = PartyUi.action(activity, "DJ", false);
+            FrameLayout.LayoutParams dp = new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.TOP | Gravity.LEFT);
+            dp.topMargin = dp(10); dp.leftMargin = dp(showPlaylists ? 124 : 68); root.addView(dj, dp);
+            dj.setContentDescription("AI DJ · sammensæt musik"); dj.setOnClickListener(v -> showDj());
+        }
         if (showPlaylists) {
             ImageView playlists = PartyUi.icon(activity, "playlist", "Favoritplaylister fra Music Assistant");
             FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.TOP | Gravity.LEFT);
@@ -585,6 +591,60 @@ public final class PartyModePlugin implements KioskPlugin {
     private void panelHeading(LinearLayout rows, String title) {
         TextView t = PartyUi.text(rows.getContext(), title, 12, PartyUi.MUTED); t.setPadding(dp(4), dp(16), 0, dp(10)); rows.addView(t);
     }
+    private boolean validDjUrl(String url) {
+        try { URL value = new URL(url); return url.length() <= 2048 && ("http".equals(value.getProtocol()) || "https".equals(value.getProtocol())) && !value.getHost().isEmpty(); }
+        catch (Exception ignored) { return false; }
+    }
+    private void configureDj() {
+        Activity a = activeKioskActivity(); if (a == null) return;
+        LinearLayout body = panelBody(a);
+        body.addView(PartyUi.text(a, "Adresse fra Party AI DJ-add-on: http://HA-IP:8101/#token=DIT_API_TOKEN", 15, PartyUi.MUTED));
+        EditText field = new EditText(a); field.setSingleLine(false); field.setTextColor(PartyUi.INK);
+        field.setText(context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).getString("dj_url", ""));
+        body.addView(field, new LinearLayout.LayoutParams(-1, -2));
+        addPanelAction(body, "Gem og åbn AI DJ", false, () -> {
+            String url = field.getText().toString().trim(); if (!validDjUrl(url)) { field.setError("Angiv en http/https-adresse"); return; }
+            context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit().putString("dj_url", url).apply(); clearPartyGuests(); showDj();
+        });
+        openSheet(a, "AI DJ · forbindelse", body, false);
+    }
+    private void showDj() {
+        Activity a = activeKioskActivity(); if (a == null || !allowSearch) return;
+        String url = context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).getString("dj_url", "");
+        if (!validDjUrl(url)) { configureDj(); return; }
+        LinearLayout body = panelBody(a);
+        android.webkit.WebView web = new android.webkit.WebView(a);
+        web.getSettings().setJavaScriptEnabled(true); web.getSettings().setDomStorageEnabled(true);
+        web.setWebViewClient(new android.webkit.WebViewClient());
+        web.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            public void onViewAttachedToWindow(View v) {}
+            public void onViewDetachedFromWindow(View v) { web.stopLoading(); web.destroy(); }
+        });
+        body.addView(web, new LinearLayout.LayoutParams(-1, 0, 1)); openSheet(a, "AI DJ", body, false); web.loadUrl(url);
+    }
+    private void showSimilar(String uri) {
+        Activity a = activeKioskActivity(); if (a == null || io == null || !allowSearch) return;
+        final String queue = activeQueue(), base = maBase(), token = maToken; final long generation = partyGeneration;
+        LinearLayout body = panelBody(a); ScrollView scroll = new ScrollView(a); LinearLayout rows = panelBody(a); scroll.addView(rows);
+        body.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1)); TextView status = PartyUi.text(a, "Finder lignende numre…", 16, PartyUi.MUTED); rows.addView(status);
+        openSheet(a, "Lignende numre", body, false); final long request = ++searchGeneration;
+        io.execute(() -> {
+            java.util.List<PartyJukebox.Result> found = null;
+            try {
+                java.net.URI reference = new java.net.URI(uri);
+                Object response = partyRequest(base, token, "music/tracks/similar_tracks", new JSONObject()
+                    .put("item_id", reference.getPath().substring(1)).put("provider_instance_id_or_domain", reference.getScheme()).put("limit", 20).put("allow_lookup", true));
+                if (response instanceof JSONArray) found = PartyJukebox.results(new JSONObject().put("tracks", response), base);
+            } catch (Throwable ignored) {}
+            final java.util.List<PartyJukebox.Result> matches = found;
+            main.post(() -> {
+                if (!validPanel(queue, generation, request)) return; rows.removeAllViews();
+                if (matches == null || matches.isEmpty()) { status.setText("Ingen lignende numre fra MA eller dine udbydere"); rows.addView(status); return; }
+                for (PartyJukebox.Result match : matches) addMediaRow(a, rows, match, request, queue, generation, () -> chooseMedia(a, match, false, queue, generation));
+            });
+        });
+    }
+
     private void showSearch() {
         Activity activity = activeKioskActivity();
         if (!allowSearch || !playerControlsReady() || activity == null) return;
@@ -599,11 +659,11 @@ public final class PartyModePlugin implements KioskPlugin {
         field.addView(input, new LinearLayout.LayoutParams(0, dp(56), 1));
         ImageView submit = PartyUi.icon(activity, "search", "Søg i Music Assistant"); field.addView(submit, new LinearLayout.LayoutParams(dp(48), dp(48)));
         LinearLayout.LayoutParams fl = new LinearLayout.LayoutParams(-1, dp(56)); fl.bottomMargin = dp(16); layout.addView(field, fl);
-        TextView mode = PartyUi.action(activity, "AI DJ · søg efter stemning", false);
+        TextView mode = PartyUi.action(activity, "Similarity · søg efter stemning", false);
         layout.addView(mode, new LinearLayout.LayoutParams(-1, dp(48)));
         mode.setOnClickListener(v -> {
             moodSearch[0] = !moodSearch[0]; searchGeneration++;
-            mode.setText(moodSearch[0] ? "AI DJ aktiv · skift til titel/kunstner" : "AI DJ · søg efter stemning");
+            mode.setText(moodSearch[0] ? "Similarity aktiv · skift til titel/kunstner" : "Similarity · søg efter stemning");
             input.setHint(moodSearch[0] ? "Calm jazz with dominant saxophone" : "Titel eller kunstner");
         });
         ScrollView scroll = new ScrollView(activity); scroll.setVerticalScrollBarEnabled(false);
@@ -651,6 +711,11 @@ public final class PartyModePlugin implements KioskPlugin {
         TextView name = PartyUi.text(a, media.track.title, 16, PartyUi.INK); name.setTypeface(Typeface.DEFAULT_BOLD); name.setMaxLines(2); name.setEllipsize(android.text.TextUtils.TruncateAt.END); labels.addView(name);
         if (!media.track.artist.isEmpty()) { TextView artist = PartyUi.text(a, media.track.artist, 13, PartyUi.MUTED); artist.setSingleLine(true); artist.setEllipsize(android.text.TextUtils.TruncateAt.END); labels.addView(artist); }
         row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1));
+        if (media.uri.contains("://track/") && context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).getBoolean("similar_buttons", false)) {
+            TextView similar = PartyUi.action(a, "≈", false); similar.setContentDescription("Find numre som " + media.track.title);
+            row.addView(similar, new LinearLayout.LayoutParams(dp(44), dp(44)));
+            similar.setOnClickListener(v -> { if (validPanel(queue, generation, request)) showSimilar(media.uri); });
+        }
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2); lp.bottomMargin = dp(8); rows.addView(row, lp);
         row.setOnClickListener(v -> { if (validPanel(queue, generation, request)) action.run(); });
         if (!media.track.artwork.isEmpty() && artIo != null) {
@@ -1008,6 +1073,17 @@ public final class PartyModePlugin implements KioskPlugin {
         for (int i = 0; i < ids.length; i++) {
             final String effect = ids[i]; addPanelAction(rows, names[i], effect.equals(partyEffect), () -> { setPartyEffect(effect); showPartyMenu(anchor); });
         }
+        panelHeading(rows, "MUSIKVALG");
+        addPanelAction(rows, "AI DJ · åbn", false, this::showDj);
+        addPanelAction(rows, "AI DJ · opsæt adresse", false, this::configureDj);
+        SharedPreferences djPrefs = context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE);
+        addPanelAction(rows, "Gæste-QR · AI DJ i stedet for MA", djPrefs.getBoolean("dj_qr", false), () -> {
+            djPrefs.edit().putBoolean("dj_qr", !djPrefs.getBoolean("dj_qr", false)).apply(); clearPartyGuests(); pollPartyGuests(); showPartyMenu(anchor);
+        });
+        addPanelAction(rows, "Vis lignende-numre-knapper", djPrefs.getBoolean("similar_buttons", false), () -> {
+            djPrefs.edit().putBoolean("similar_buttons", !djPrefs.getBoolean("similar_buttons", false)).apply(); showPartyMenu(anchor);
+        });
+        if (partyTrackMedia != null) addPanelAction(rows, "≈ Lignende det aktuelle nummer", false, () -> showSimilar(partyTrackMedia.optString("uri", "")));
         panelHeading(rows, "SKÆRM");
         addPanelAction(rows, "Hele køen", partyQueueVisible, () -> { setPartyQueue(!partyQueueVisible); showPartyMenu(anchor); });
         addPanelAction(rows, "Vis volumen", showVolume, () -> { setPlayerControlsVisible(true, !showVolume); showPartyMenu(anchor); });
@@ -1089,6 +1165,13 @@ public final class PartyModePlugin implements KioskPlugin {
     }
 
     private void pollPartyGuests() {
+        if (!partyFullscreen || context == null) return;
+        SharedPreferences djPrefs = context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE);
+        String djUrl = djPrefs.getString("dj_url", "");
+        if (partyGuestsFollow && djPrefs.getBoolean("dj_qr", false) && validDjUrl(djUrl)) {
+            if (!djUrl.equals(partyGuestUrl) || partyQr == null) { partyGuestUrl = djUrl; partyQr = partyQrBitmap(djUrl); }
+            partyGuestText = "Scan og ønsk musik hos AI DJ"; partyGuestStatus = "AI DJ gæstelink"; updateParty(); return;
+        }
         if (!partyFullscreen || !partyGuestsFollow || io == null || context == null) return;
         long now = SystemClock.elapsedRealtime();
         if (partyGuestLastSuccess > 0 && now - partyGuestLastSuccess > 12000) {

@@ -29,11 +29,12 @@ public final class PartyQaActivity extends Activity {
                 call("dismissSearch");
                 if ("search".equals(mode) || "placement".equals(mode) || "ai".equals(mode)) {
                     call("showSearch"); Dialog dialog = (Dialog)field("searchDialog");
-                    if ("ai".equals(mode)) findText(dialog.getWindow().getDecorView(), "AI DJ · søg efter stemning").performClick();
+                    if ("ai".equals(mode)) findText(dialog.getWindow().getDecorView(), "Similarity · søg efter stemning").performClick();
                     EditText input = findEdit(dialog.getWindow().getDecorView()); input.setText("party"); input.onEditorAction(EditorInfo.IME_ACTION_SEARCH);
                     if ("placement".equals(mode)) main.postDelayed(() -> { Dialog d = (Dialog)field("searchDialog"); TextView t = findText(d.getWindow().getDecorView(), "Aftenlys"); if (t == null) throw new AssertionError("search results absent"); ((View)t.getParent().getParent()).performClick(); }, 700);
                 } else if ("settings".equals(mode)) call("showPartyMenu", View.class, new View(PartyQaActivity.this));
                 else if ("playlists".equals(mode)) call("showPlaylists");
+                else if ("dj".equals(mode)) call("configureDj");
                 else if ("lyrics".equals(mode) || "discolyrics".equals(mode)) call("setPartyEffect", String.class, mode);
                 else if ("switch".equals(mode)) {
                     plugin.onEvent("switch.active", Collections.singletonMap("on", false));

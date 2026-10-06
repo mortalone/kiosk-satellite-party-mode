@@ -1,10 +1,8 @@
-Party Mode 0.1.8
+Party Mode 0.1.9
 
-- Add a Home Assistant Party Mode switch that reports activation and accepts on/off commands. Visibility/playback conditions still apply; disabled plugins become unavailable.
-- Add a HA visualization select without exceeding Kiosk’s 20-command limit; existing actions are preserved.
-- Add Disco Lyrics: centered large synchronized lines, neon colors, audio-reactive glow and subtle scale. Plain lyrics stay readable without invented timestamps.
-- Add an experimental AI DJ search mode backed by Music Assistant Sonic Similarity. Requires enabled free-text search and analyzed library tracks; English is recommended in this first test.
-- Include a Home Assistant package and Lovelace example using the same search engine, with optional Danish-to-English translation through an existing HA AI Task.
-- Preserve existing MA guest QR, queue placement, settings migration and normal title/artist search.
-- Companion Twinkly Bridge 0.1.5 adds album-cover palettes over Sendspin, calm Cover Mood and optional cover tinting of music effects. Spectrum 0.2.12 hides startup diagnostics until explicitly requested.
-- Not a complete catalog-curating DJ or Google speaker voice integration. Physical Pi/Flex and the HA example still require testing in the user's installation.
+- Open the new Party AI DJ add-on from a DJ button and configure its address in the native Party menu.
+- Add an optional AI DJ guest QR, while preserving the MA guest QR as default.
+- Rename the old mood-search test to Similarity and add optional per-result similar-track buttons plus a current-track similar list.
+- Party AI DJ 0.1.0 supports HA AI Task or OpenAI-compatible endpoints, varied playlists, Music Assistant catalog validation, skip missing matches, preview and add/next/play.
+- Twinkly Bridge 0.1.6 isolates 45–160 Hz bass from timestamped PCM, ignores overall loudness/server peaks when PCM bass is available, and adds live synchronization offset in ingress.
+- Requires add-on/AI configuration and physical sync testing; no native MA server modifications or new player group are needed.

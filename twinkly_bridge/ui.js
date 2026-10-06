@@ -12,7 +12,7 @@ async function readApiResponse(response) {
 class ControlQueue {
   constructor(send, onState, onError) {
     this.send = send; this.onState = onState; this.onError = onError;
-    this.state = {mode:'restore', color:'#ff4080', brightness:30, speed:1, pattern:'mirror', gain:1, punch:50, cover_colors:false};
+    this.state = {mode:'restore', color:'#ff4080', brightness:30, speed:1, pattern:'mirror', gain:1, punch:50, cover_colors:false, light_delay_ms:0};
     this.pending = null; this.sending = false; this.epoch = 0; this.revision = -1;
   }
   accept(status, epoch) {
@@ -58,12 +58,13 @@ if (typeof document !== 'undefined') {
   const controls = new ControlQueue(patch => request('api/control', patch), state => {
     document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('selected', b.dataset.mode === state.mode));
     document.querySelectorAll('[data-pattern]').forEach(b => b.classList.toggle('selected', b.dataset.pattern === state.pattern));
-    for (const id of ['color','brightness','speed','gain','punch']) $(id).value = state[id];
+    for (const id of ['color','brightness','speed','gain','punch','light_delay_ms']) $(id).value = state[id];
     $('coverColors').checked = state.cover_colors;
     $('brightnessValue').textContent = state.brightness+'%';
     $('speedValue').textContent = state.speed+'×';
     $('gainValue').textContent = state.gain+'×';
     $('punchValue').textContent = state.punch+'%';
+    $('light_delay_msValue').textContent = state.light_delay_ms+' ms';
   }, error => { $('error').textContent = error.message; });
   let refreshing = false;
   async function refresh() {
@@ -78,7 +79,7 @@ if (typeof document !== 'undefined') {
       const source = s.sendspin || {};
       $('source').textContent = source.connected ? 'Sendspin forbundet'+(source.group?' · '+source.group:'')+'\n'+(s.audio_fresh?'Modtager visualiseringsdata':source.clock_synced?'Venter på musik fra gruppen':'Synkroniserer ur…') : source.state === 'disabled' ? 'Angiv sendspin_url under konfiguration' : 'Sendspin: '+(source.state||'venter');
       $('error').textContent = [s.error, source.error].filter(Boolean).join('\n');
-      $('diagnostics').textContent = 'Ønsket: '+s.mode+' · Aktiv: '+s.applied_mode+' · Gendannet realtime: '+s.recoveries+' · Frames: '+(source.frames_rendered||0)+(source.roles?.includes('player@v1')?' · Lydpakker: '+(source.audio_chunks_received||0)+' (uden lydudgang)':'');
+      $('diagnostics').textContent = 'Ønsket: '+s.mode+' · Aktiv: '+s.applied_mode+' · Gendannet realtime: '+s.recoveries+' · Frames: '+(source.frames_rendered||0)+(source.roles?.includes('player@v1')?' · Lydpakker: '+(source.audio_chunks_received||0)+' (uden lydudgang)':'')+(s.bass_fresh?' · PCM-bas aktiv':' · Spektrum-bas');
     } catch (error) {
       $('error').textContent = error.message;
       $('status').textContent = 'Aktuel status kunne ikke hentes';
@@ -91,13 +92,13 @@ if (typeof document !== 'undefined') {
   document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => controls.change({mode:b.dataset.mode})));
   document.querySelectorAll('[data-pattern]').forEach(b => b.addEventListener('click', () => controls.change({mode:'music', pattern:b.dataset.pattern})));
   let punchTimer = null;
-  for (const id of ['color','brightness','speed','gain','punch']) {
+  for (const id of ['color','brightness','speed','gain','punch','light_delay_ms']) {
     $(id).addEventListener('change', () => {
       if (id === 'punch') { clearTimeout(punchTimer); punchTimer = null; }
       controls.change({[id]:id === 'color'?$(id).value:Number($(id).value)});
     });
     if (id !== 'color') $(id).addEventListener('input', () => {
-      $(id+'Value').textContent = $(id).value+(['brightness','punch'].includes(id)?'%':'×');
+      $(id+'Value').textContent = $(id).value+(id==='light_delay_ms'?' ms':['brightness','punch'].includes(id)?'%':'×');
       if (id === 'punch' && punchTimer === null) punchTimer = setTimeout(() => {
         punchTimer = null; controls.change({punch:Number($('punch').value)});
       }, 100);

@@ -2,9 +2,9 @@ FROM python:3.12.12-slim-bookworm
 ARG BUILD_VERSION
 ARG BUILD_ARCH
 LABEL io.hass.version="${BUILD_VERSION}" io.hass.type="app" io.hass.arch="${BUILD_ARCH}"
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
-COPY bridge.py bass.py sendspin_source.py index.html ui.js ./
-CMD ["python", "bridge.py"]
+COPY dj.py index.html ./
+CMD ["python","dj.py"]

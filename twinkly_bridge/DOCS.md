@@ -198,3 +198,20 @@ Cover modtages fra samme Sendspin-gruppe som musikframes, så der kræves ingen
 HA-lampeintegration eller ekstra API-token. Bridge annoncerer nu også artwork-rollen;
 genstart add-on efter opdatering, så MA kan genforhandle rollerne. Startupoptionen
 `cover_colors: true` bevarer valget efter genstart (ingressændringer er midlertidige).
+
+## Bas og synkronisering · 0.1.6
+
+Den lydløse Sendspin-afspiller måler nu en bas-envelope i 45–160 Hz fra PCM-lyden,
+uden FFT, lydudgang eller lagring af lyd. Konfigurationsvalget `sendspin_player`
+skal være **true** for PCM-bas. Ingress viser **PCM-bas aktiv**, når målinger bliver
+afviklet. Ellers bruges spektrum-bas som fallback.
+
+Prøv **Radial Pulse**, Disco **90–100**, hastighed **1×** og følsomhed **1×**.
+Hastighed ændrer mønstrenes bevægelse, ikke musikkens tempo. Positiv **Lysforsinkelse**
+giver lyset senere; negativ giver det tidligere. Hvis lyset kommer før det basanslag,
+du hører fra Sonos, øges værdien fx 50 ms ad gangen. Indstillingen påvirker både
+bas- og visualiseringsframes og virker uden genstart. Gem `light_delay_ms` i add-on-
+konfigurationen for at bevare den efter genstart.
+
+Konstant bas giver ikke nødvendigvis tydelige pulser. Dette er basanslag, ikke
+perfekt adskillelse af stortromme fra basguitar eller en konstrueret beat-clock.

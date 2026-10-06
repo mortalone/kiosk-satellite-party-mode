@@ -30,7 +30,7 @@ def validate_control(data):
         if data["pattern"] not in PATTERNS:
             raise ValueError("Unknown music pattern")
         result["pattern"] = data["pattern"]
-    for key, low, high in (("brightness", 0, 100), ("speed", 0.1, 5), ("gain", 0.5, 3), ("punch", 0, 100)):
+    for key, low, high in (("brightness", 0, 100), ("speed", 0.1, 5), ("gain", 0.5, 3), ("punch", 0, 100), ("light_delay_ms", -2000, 2000)):
         if key in data:
             value = float(data[key])
             if not math.isfinite(value) or not low <= value <= high:
@@ -62,8 +62,10 @@ class MusicDynamics:
         self.bands = []
         self.previous = None
         self.pulse = 0.0
+        self.last_signal = None
+        self.since_onset = 1.0
 
-    def process(self, bands, loudness, peak, gain, punch, dt):
+    def process(self, bands, loudness, peak, gain, punch, dt, bass_rms=None):
         if not bands:
             self.__init__()
             return [], 0.0, 0.0, 1.0
@@ -73,10 +75,17 @@ class MusicDynamics:
         # before gain so raising sensitivity cannot flatten the pulse detector.
         bass = sum(bands[:max(1, len(bands)//4)]) / max(1, len(bands)//4)
         energy = max(loudness, sum(bands)/len(bands), bass)
-        signal = 10 ** (3 * (energy - 1)) if energy > 0 else 0.0
-        onset = 0.0 if self.previous is None else min(1.0, max(0.0, (signal-self.previous)/max(0.015, self.previous))*2)
-        self.previous = signal if self.previous is None else self.previous + (signal-self.previous)*(1-math.exp(-dt/0.2))
-        self.pulse = max(self.pulse * math.exp(-dt/(0.4-0.28*amount)), onset, min(1.0, peak))
+        signal = bass_rms if bass_rms is not None else (10 ** (3 * (bass - 1)) if bass > 0 else 0.0)
+        self.since_onset += dt
+        rising = self.last_signal is not None and signal > self.last_signal * 1.12
+        onset = 0.0
+        if rising and self.since_onset >= 0.08 and signal > max(0.00001, (self.previous or 0)*1.2):
+            onset = min(1.0, (signal-(self.previous or 0))/max(0.00001, self.previous or signal)*1.5)
+            self.since_onset = 0.0
+        self.last_signal = signal
+        self.previous = signal if self.previous is None else self.previous+(signal-self.previous)*(1-math.exp(-dt/0.35))
+        self.pulse = max(self.pulse * math.exp(-dt/(0.35-0.28*amount)), onset,
+                         min(1.0, peak) if bass_rms is None else 0.0)
         if len(self.bands) != len(bands):
             self.bands = [0.0]*len(bands)
         # Soft gain retains differences instead of clipping every strong band.
@@ -85,7 +94,7 @@ class MusicDynamics:
             target = boost(value)
             tau = (0.12-0.095*amount) if target > self.bands[i] else (0.75-0.65*amount)
             self.bands[i] += (target-self.bands[i])*(1-math.exp(-dt/tau))
-        modulation = (1-amount) + amount*(0.1+0.9*self.pulse)
+        modulation = (1-amount) + amount*(0.02+0.98*self.pulse)
         return list(self.bands), boost(loudness), self.pulse, modulation
 
 
@@ -217,6 +226,7 @@ class Bridge:
         self.fps = max(5, min(30, int(options.get("fps", 20))))
         self.settings = {"mode": "restore", "brightness": int(options.get("brightness", 30)),
                          "speed": float(options.get("speed", 1)), "color": (255, 64, 128),
+                         "light_delay_ms": options.get("light_delay_ms", 0),
                          "cover_colors": options.get("cover_colors", False),
                          "pattern": options.get("music_pattern", "mirror"), "gain": 1.0,
                          "punch": validate_control({"punch": options.get("music_punch", 50)})["punch"]}
@@ -227,6 +237,7 @@ class Bridge:
         self.revision = 0
         self.bands, self.bands_at = [], 0
         self.loudness, self.peak = 0.0, 0.0
+        self.bass_rms, self.bass_at = 0.0, 0.0
         self.info = {"connected": False, "leds": 0, "error": "", "applied_mode": "restore", "recoveries": 0}
         self.cover_data = None
         self.cover_palette = []
@@ -244,6 +255,7 @@ class Bridge:
         with self.lock:
             self.settings.update(update)
             self.revision += 1
+        if "light_delay_ms" in update and self.sendspin is not None: self.sendspin.set_delay(update["light_delay_ms"])
         self.wake.set()
         return self.status()
 
@@ -261,9 +273,13 @@ class Bridge:
             if peak is not None:
                 self.peak = peak
 
+    def bass(self, rms):
+        with self.lock: self.bass_rms, self.bass_at = rms, time.monotonic()
+
     def clear_audio(self):
         with self.lock:
             self.bands, self.bands_at, self.loudness, self.peak = [], 0, 0, 0
+            self.bass_rms, self.bass_at = 0, 0
 
     def status(self):
         with self.lock:
@@ -273,9 +289,12 @@ class Bridge:
                     "pattern": self.settings["pattern"], "gain": self.settings["gain"],
                     "punch": self.settings["punch"],
                     "color": "#" + "".join(f"{c:02x}" for c in self.settings["color"]),
+                    "light_delay_ms": self.settings["light_delay_ms"],
                     "cover_colors": self.settings["cover_colors"],
                     "cover_palette": ["#"+"".join(f"{c:02x}" for c in rgb) for rgb in self.cover_palette],
                     "revision": self.revision,
+                    "bass_fresh": time.monotonic()-self.bass_at < 0.2,
+                    "bass_rms": self.bass_rms,
                     "audio_fresh": time.monotonic() - self.bands_at < 1.5}
         result["sendspin"] = self.sendspin.status() if self.sendspin else {"connected": False, "state": "disabled"}
         return result
@@ -298,6 +317,7 @@ class Bridge:
                     applied_mode = self.info["applied_mode"]
                     bands = list(self.bands) if time.monotonic() - self.bands_at < 1.5 else []
                     loudness, peak = (self.loudness, self.peak) if bands else (0, 0)
+                    bass_rms = self.bass_rms if time.monotonic()-self.bass_at < 0.2 else None
                     self.peak *= 0.85
                 if cover_data is not None:
                     try:
@@ -351,7 +371,7 @@ class Bridge:
                         if mode != "music":
                             dynamics = MusicDynamics()
                         smooth, level, pulse, modulation = dynamics.process(bands, loudness, peak,
-                            settings["gain"], settings["punch"], dt)
+                            settings["gain"], settings["punch"], dt, bass_rms)
                         colors = frame_colors(mode, device.num_leds, phase, settings["color"], smooth,
                                               settings["pattern"], level, peak,
                                               settings["punch"], pulse, modulation,

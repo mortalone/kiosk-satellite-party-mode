@@ -1,3 +1,13 @@
+# 0.1.6
+
+- Measure 45–160 Hz RMS from the already-received stereo PCM; discard the audio after analysis and schedule 20 ms bass frames against Sendspin playback time.
+- Detect bass rises independently of vocals/overall loudness; ignore generic server peaks when PCM bass is available.
+- Use shorter, darker high-Disco pulses with adaptive relative thresholds that also work at quiet playback levels.
+- Retain visualizer-only fallback, original audio roles, missing-frame handling and cover palettes.
+- Add live light_delay_ms slider; reschedule buffered frames on the Sendspin loop, without restarting the add-on.
+- Test rejection of 1500 Hz energy, scheduled-not-arrival output, quiet bass and repeated kick pulses against loud vocals.
+- Physical Sonos/Flex synchronization requires user calibration; this detects bass transients, not a guaranteed BPM or separated kick drum stem.
+
 # 0.1.5
 
 - Receive a 64×64 album cover through Sendspin's artwork role alongside the silent player and visualizer roles; works with encrypted and legacy protocols.

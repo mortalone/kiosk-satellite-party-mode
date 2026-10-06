@@ -117,3 +117,17 @@ lyrics are displayed without simulated timing.
 The search sheet now includes an experimental **AI DJ** mood-search toggle. See
 [AI DJ setup and Lovelace examples](home_assistant/README.md) for dependencies,
 limitations, optional Danish translation and the future voice entry point.
+
+### A real AI DJ (0.1.9)
+
+Install [Party AI DJ](ai_dj/DOCS.md) from this repository’s HA add-on store. It
+curates artist/title/year candidates with HA AI Task or an OpenAI-compatible
+endpoint, resolves only real Music Assistant catalog matches, skips missing songs
+and previews a varied list before queueing. The native **DJ** button, optional
+guest QR, Lovelace and automation API share the same backend. Configure its
+address from the Party menu, without adding SDK settings or removing existing actions.
+
+The earlier mood-search toggle is now called **Similarity**. Enable **Vis lignende-
+numre-knapper** for per-result ≈ lists, or use the current-track similar list in
+the Party menu. Artist/title identity is verified; AI musical claims and original
+release years are not always independently verifiable.

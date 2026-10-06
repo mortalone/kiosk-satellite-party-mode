@@ -1,0 +1,31 @@
+name: Test and build Party AI DJ
+on:
+  push:
+    branches: [main]
+    paths: ["ai_dj/**", ".github/workflows/ai_dj.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r ai_dj/requirements.txt
+      - run: python -m unittest discover -s ai_dj/tests -v
+      - name: Build container
+        run: docker build --build-arg BUILD_VERSION=0.1.0 --build-arg BUILD_ARCH=amd64 -t party-ai-dj:test ai_dj
+      - name: Verify startup
+        run: |
+          mkdir /tmp/dj-options
+          printf '%s\n' '{}' > /tmp/dj-options/options.json
+          docker run -d --name dj-test -p 18101:8101 -v /tmp/dj-options:/data:ro party-ai-dj:test
+          trap 'docker logs dj-test; docker rm -f dj-test' EXIT
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent http://127.0.0.1:18101/health; then exit 0; fi
+            sleep 1
+          done
+          exit 1

@@ -1,3 +1,5 @@
+Den rigtige AI DJ findes nu i [Party AI DJ-add-on](../ai_dj/DOCS.md). Eksemplet nedenfor bruger den tidligere Similarity-søgning.
+
 # AI DJ · første afprøvning
 
 Første version bruger **Music Assistants eksisterende Sonic Similarity-plugin** som
