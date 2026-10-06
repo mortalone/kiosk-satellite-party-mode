@@ -244,6 +244,7 @@ class Bridge:
         self.bands, self.bands_at = [], 0
         self.loudness, self.peak = 0.0, 0.0
         self.bass_rms, self.bass_at = 0.0, 0.0
+        self.bass_detector = "rms_fallback"
         self.bass_envelope= BassEnvelope();self.bass_hits=0
         self.info = {"connected": False, "leds": 0, "error": "", "applied_mode": "restore", "recoveries": 0}
         self.cover_data = None
@@ -282,19 +283,24 @@ class Bridge:
                 self.peak = peak
             self.diagnostic.add("spectrum", bands=bands, loudness=loudness, peak=peak)
 
-    def bass(self, rms, at=None):
+    def bass(self, rms, at=None, onset=None):
         at=time.monotonic() if at is None else at
         with self.lock:
             self.bass_rms, self.bass_at = rms, at
-            hit = self.bass_envelope.feed(rms,at)
+            self.bass_detector = "spectral_attack" if onset is not None else "rms_fallback"
+            hit = self.bass_envelope.feed(rms,at,onset)
             if hit: self.bass_hits+=1
             self.diagnostic.add("bass", rms=rms, baseline=self.bass_envelope.baseline,
-                                hit=hit, hits=self.bass_hits, scheduled_age_ms=round((time.monotonic()-at)*1000,3))
+                                hit=hit, hits=self.bass_hits, onset=onset,
+                                onset_threshold=self.bass_envelope.onset_threshold,
+                                detector="spectral_attack" if onset is not None else "rms_fallback",
+                                scheduled_age_ms=round((time.monotonic()-at)*1000,3))
 
     def clear_audio(self):
         with self.lock:
             self.bands, self.bands_at, self.loudness, self.peak = [], 0, 0, 0
             self.bass_rms, self.bass_at = 0, 0
+            self.bass_detector = "rms_fallback"
             self.bass_envelope= BassEnvelope()
 
     def status(self):
@@ -312,6 +318,7 @@ class Bridge:
                     "bass_fresh": time.monotonic()-self.bass_at < 0.2,
                     "bass_rms": self.bass_rms,
                     "bass_hits": self.bass_hits,
+                    "bass_detector": self.bass_detector,
                     "bass_pulse": self.bass_envelope.pulse(time.monotonic(),self.settings["punch"]),
                     "spectrum_fresh": time.monotonic() - self.bands_at < 1.5,
                     "audio_fresh": time.monotonic() - self.bands_at < 1.5 or time.monotonic()-self.bass_at < .2}
@@ -511,7 +518,7 @@ def handler_for(bridge, ingress=False):
                 if self.path == "/api/diagnostic":
                     if data.get("action") == "start":
                         with bridge.lock:
-                            metadata = dict(version="0.1.8", settings=dict(bridge.settings), fps=bridge.fps)
+                            metadata = dict(version="0.1.9", settings=dict(bridge.settings), fps=bridge.fps)
                         bridge.diagnostic.start(metadata)
                     elif data.get("action") == "stop": bridge.diagnostic.stop()
                     else: raise ValueError("Expected start or stop")

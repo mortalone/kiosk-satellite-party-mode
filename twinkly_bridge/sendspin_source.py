@@ -88,7 +88,7 @@ class FrameBuffer:
                     reason="late_render", age_ms=round((now-due)*1000,3))
                 continue
             if hasattr(frame, "bass_rms"):
-                self.bridge.bass(frame.bass_rms,due); continue
+                self.bridge.bass(frame.bass_rms,due,frame.onset); continue
             count += 1
             if frame.spectrum is not None:
                 bands = [min(1.0, max(0.0, value / 65535)) for value in frame.spectrum]

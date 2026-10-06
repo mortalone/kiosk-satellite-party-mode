@@ -90,7 +90,7 @@ if (typeof document !== 'undefined') {
       const source = s.sendspin || {};
       $('source').textContent = sourceDescription(s);
       $('error').textContent = [s.error, source.error].filter(Boolean).join('\n');
-      $('diagnostics').textContent = 'Ønsket: '+s.mode+' · Aktiv: '+s.applied_mode+' · Gendannet realtime: '+s.recoveries+' · Frames: '+(source.frames_rendered||0)+(source.roles?.includes('player@v1')?' · Lydpakker: '+(source.audio_chunks_received||0)+' (uden lydudgang)':'')+(s.bass_fresh?' · PCM-bas aktiv · Basanslag: '+(s.bass_hits||0):s.spectrum_fresh?' · Spektrum-bas':' · Intet aktuelt lydsignal');
+      $('diagnostics').textContent = 'Ønsket: '+s.mode+' · Aktiv: '+s.applied_mode+' · Gendannet realtime: '+s.recoveries+' · Frames: '+(source.frames_rendered||0)+(source.roles?.includes('player@v1')?' · Lydpakker: '+(source.audio_chunks_received||0)+' (uden lydudgang)':'')+(s.bass_fresh?' · PCM-bas aktiv'+(s.bass_detector==='spectral_attack'?' · Spektral slagdetektor':'')+' · Basanslag: '+(s.bass_hits||0):s.spectrum_fresh?' · Spektrum-bas':' · Intet aktuelt lydsignal');
     } catch (error) {
       $('error').textContent = error.message;
       $('status').textContent = 'Aktuel status kunne ikke hentes';

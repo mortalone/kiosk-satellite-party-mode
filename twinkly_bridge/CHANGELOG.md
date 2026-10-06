@@ -1,3 +1,11 @@
+# 0.1.9
+
+- Replace PCM amplitude-rise decisions with a bass-focused, maximum-filter spectral-flux detector inspired by SuperFlux. Combine new bass energy with a nearby broadband attack and an adaptive median/MAD threshold; reject treble-only events and drum-tail cutoffs.
+- Keep timestamped 20 ms windows, scheduled playback, missing-spectrum fallback and all existing patterns/colors. No BPM oscillator or automatic physical-delay correction is added.
+- Use NumPy FFTs with bounded 2048-sample mono history; the dependency is pinned and available as binary wheels on amd64/aarch64. No sound device or microphone is required.
+- Show the spectral detector in ingress; add low/attack flux, attack-power fraction, bass-power fraction and decision threshold to opt-in diagnostics.
+- Audio-level regressions cover beating tones, vibrato, tremolo, slow fades, kick pitch/level/rate variations, simultaneous held tone/voice, drum decay, treble-only attacks, packet fragmentation and stream reset. These are synthetic regressions, not a claim of validation across every song or the physical Flex.
+
 # 0.1.8
 
 - Add opt-in 60-second diagnostic capture and JSON download in the control panel; auto-stop without keeping the browser open.

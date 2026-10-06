@@ -88,8 +88,9 @@ Call `rest_command.twinkly_bridge` with data `mode: rainbow` (or another support
 The add-on receives 32 spectrum bands plus loudness and transient peaks at up to
 the selected FPS. With `sendspin_player: true`, it also advertises a player role
 and accepts stereo 16-bit PCM at 48 or 44.1 kHz. It counts and discards incoming
-audio immediately; it has no sound output, audio queue, microphone or local FFT.
-Only server-provided visualizer data drives the light. It does not depend on Kiosk
+audio after measuring bass and short spectral attack features; it has no sound
+output or microphone. Timestamped PCM features drive pulses, while server-provided
+visualizer data supplies the frequency layout. It does not depend on Kiosk
 Satellite. The additional PCM stream uses network bandwidth (about 192 kB/s at
 48 kHz). Player volume and mute are acknowledged for protocol compatibility;
 they do not control LED brightness, which is adjusted in the add-on. Future frames are buffered and rendered using the server's playback
@@ -120,7 +121,8 @@ captured by this connection.
 The ingress **Roligt ↔ Disco** slider applies immediately to every music pattern.
 At 0, transitions are softer and spectrum bands fade slowly. At 100, the response
 is faster, with a dimmer background and stronger pulses from bass/energy rises
-and Sendspin peak events. Radial Pulse becomes the most obvious full-strip pulse;
+(spectral attacks with PCM; bass/energy rises and Sendspin peaks in visualizer-only
+mode). Radial Pulse becomes the most obvious full-strip pulse;
 Mirror/Spectrum keep their frequency layout but gain stronger brightness contrast.
 Wave/Particles/Tunnel also gain movement speed. This is onset detection, not BPM
 tracking or a predefined beat loop. Held tones do not fabricate repeated beats.
@@ -199,12 +201,15 @@ HA-lampeintegration eller ekstra API-token. Bridge annoncerer nu også artwork-r
 genstart add-on efter opdatering, så MA kan genforhandle rollerne. Startupoptionen
 `cover_colors: true` bevarer valget efter genstart (ingressændringer er midlertidige).
 
-## Bas og synkronisering · 0.1.6
+## Bas og synkronisering · 0.1.9
 
-Den lydløse Sendspin-afspiller måler nu en bas-envelope i 45–160 Hz fra PCM-lyden,
-uden FFT, lydudgang eller lagring af lyd. Konfigurationsvalget `sendspin_player`
+Den lydløse Sendspin-afspiller måler en bas-envelope i 45–160 Hz og nye spektrale
+anslag fra PCM-lyden. En kort FFT-analyse bruger højst 2048 mono-samples og
+sammenligner frekvensernes vækst med et maksimumfiltreret tidligere spektrum.
+Der er ingen lydudgang eller lagring af optagelser. Konfigurationsvalget `sendspin_player`
 skal være **true** for PCM-bas. Ingress viser **PCM-bas aktiv**, når målinger bliver
-afviklet. Ellers bruges spektrum-bas som fallback.
+afviklet, og **Spektral slagdetektor** bekræfter den nye PCM-metode. Ellers bruges
+spektrum-bas som fallback.
 
 Prøv **Radial Pulse**, Disco **90–100**, hastighed **1×** og følsomhed **1×**.
 Hastighed ændrer mønstrenes bevægelse, ikke musikkens tempo. Positiv **Lysforsinkelse**
@@ -226,7 +231,10 @@ Tryk **Stop måling**, eller vent til den stopper automatisk. Tryk derefter
 for denne fremgangsmåde. Optagelsen bliver ikke automatisk sammenkoblet med JSON-filen.
 
 Målingen indeholder afledte niveauer og tidsstempler, ikke selve lyden.
-`bass` viser RMS, baseline og hit-beslutning. `spectrum` viser serverens
+`bass` viser RMS, baseline og hit-beslutning. Fra 0.1.9 viser `detector` den
+anvendte metode og `onset` fire værdier: bas-flux, anslags-flux, anslagets andel
+af den nye spektrale energi og bassens andel af den aktuelle spektrale energi.
+`onset_threshold` er den adaptive tærskel for bas-flux. `spectrum` viser serverens
 visualiseringsdata. `schedule` viser tid til planlagt afspilning og om en
 ramme afvises, fx fordi negativ lysforsinkelse gør den for gammel ved ankomst.
 `led` viser puls, lydkilde, lysstyrke før Twinklys globale dæmpning og tid brugt
@@ -239,8 +247,20 @@ Automatisk kalibrering med telefonens mikrofon/kamera er ikke implementeret.
 En mikrofon kan måle den hørbare musik; kamera eller lyssensor er nødvendigt
 for også at måle det fysiske lys.
 
-Detektoren i 0.1.8 måler stigninger i 45–160 Hz RMS; den isolerer ikke stortrommen.
-Relevante metoder til videre afprøvning er [spektrale onset-funktioner](https://essentia.upf.edu/reference/streaming_OnsetDetection.html)
-og [harmonisk/perkussiv separation](https://librosa.org/doc/0.11.0/generated/librosa.decompose.hpss.html).
-De kan hjælpe med at skelne toneinstrumenter og slag, men garanterer ikke
-stortrommegenkendelse og skal afprøves med flere forskellige musiktyper.
+PCM-detektoren i 0.1.9 er en let tilpasning af principperne i
+[SuperFlux](https://librosa.org/doc/0.11.0/auto_examples/plot_superflux.html)
+og [forskningsartiklen](https://www.dafx.de/paper-archive/2013/papers/09.dafx2013_submission_12.pdf).
+Det er vores basfokuserede variant med lineære FFT-bins og 20 ms hop, ikke
+Librosas fulde SuperFlux-implementering. NumPy leverer FFT-beregningen; hele
+Librosa/Aubio/Essentia-pakken installeres ikke. Maximum-filteret dæmper små
+frekvensbevægelser, og en samtidig skarp anslagskomponent, stigende basenergi
+og en adaptiv tærskel mindsker falske pulser fra vedvarende toner.
+
+Der er ingen forudbestemt BPM, og musik uden skarpe basanslag kan derfor give
+færre pulser ved høj Disco. Basguitar med skarpe anslag kan stadig registreres;
+metoden isolerer ikke en stortrommestemme. De automatiske audio-tests bruger
+syntetiske signaler med forskellige frekvenser, niveauer og tempi. Virkelig musik
+og fysisk Sonos/Flex-forsinkelse skal fortsat afprøves. Analysevinduet kan give
+nogle få tiere millisekunders detektionsforsinkelse; lysforsinkelsen ændres ikke
+automatisk. Mirror Spectrum beholder sine farver og frekvensbevægelser; Radial
+Pulse er lettest at bruge til at kontrollere selve pulserne.
