@@ -14,9 +14,10 @@ from urllib.parse import urlsplit
 from aiohttp import ClientSession, ClientTimeout, WSMsgType
 from aiosendspin.client import SendspinClient
 from aiosendspin.client.time_sync import SendspinTimeFilter
+from aiosendspin.models.artwork import ArtworkChannel, ClientHelloArtworkSupport
 from aiosendspin.models.core import DeviceInfo
 from aiosendspin.models.player import ClientHelloPlayerSupport, SupportedAudioFormat
-from aiosendspin.models.types import Activity, AudioCodec, PlayerCommand, Roles
+from aiosendspin.models.types import Activity, ArtworkSource, PictureFormat, AudioCodec, PlayerCommand, Roles
 from aiosendspin.models.visualizer import ClientHelloVisualizerSpectrum, ClientHelloVisualizerSupport, VisualizerFrame
 from aiosendspin.noise.keys import Identity, b64url_decode
 from aiosendspin.noise.trust_store import FileClientPairingStore
@@ -104,6 +105,8 @@ class SendspinSource:
         if not isinstance(self.player_enabled, bool):
             raise ValueError("sendspin_player must be a boolean")
         self.roles = [Roles.PLAYER, Roles.VISUALIZER] if self.player_enabled else [Roles.VISUALIZER]
+        self.roles.append(Roles.ARTWORK)
+        self.artwork_support = ClientHelloArtworkSupport(channels=[ArtworkChannel(ArtworkSource.ALBUM, PictureFormat.JPEG, 64, 64)])
         # PCM needs no decoder, sound device or unbounded audio queue. Advertise
         # only formats we accept; the server can convert its group stream to PCM.
         self.player_support = ClientHelloPlayerSupport(
@@ -190,9 +193,10 @@ class SendspinSource:
     async def modern(self, identity, store, session):
         client = SendspinClient(identity, "Twinkly Bridge", self.roles, pairing_store=store,
             player_support=self.player_support if self.player_enabled else None,
-            visualizer_support=self.support, session=session,
-            device_info=DeviceInfo(product_name="Twinkly Bridge", manufacturer="Kiosk companion", software_version="0.1.4"))
+            artwork_support=self.artwork_support, visualizer_support=self.support, session=session,
+            device_info=DeviceInfo(product_name="Twinkly Bridge", manufacturer="Kiosk companion", software_version="0.1.5"))
         disconnected = asyncio.Event()
+        client.add_artwork_listener(lambda channel, data: self.bridge.artwork(data) if channel == 0 else None)
         client.add_visualizer_listener(lambda frames: self.receive(frames, client))
         if self.player_enabled:
             client.add_audio_chunk_listener(self.receive_audio)
@@ -234,8 +238,9 @@ class SendspinSource:
         now_us = lambda: time.monotonic_ns() // 1000
         hello_payload = {"client_id": identity.peer_id,
             "name": "Twinkly Bridge", "version": 1, "supported_roles": [role.value for role in self.roles],
+            "artwork@v1_support": self.artwork_support.to_dict(),
             "visualizer@v1_support": self.support.to_dict(),
-            "device_info": {"product_name": "Twinkly Bridge", "software_version": "0.1.4"}}
+            "device_info": {"product_name": "Twinkly Bridge", "software_version": "0.1.5"}}
         state_payload = {"available": True, "state": "synchronized"}
         if self.player_enabled:
             hello_payload["player@v1_support"] = self.player_support.to_dict()
@@ -292,6 +297,8 @@ class SendspinSource:
                         state_payload["player"].update(volume=self.player_volume, muted=self.player_muted)
                         await socket.send_json({"type": "client/state", "payload": state_payload})
                 elif message.type == WSMsgType.BINARY:
+                    if len(message.data) >= 9 and message.data[0] == 8:
+                        self.bridge.artwork(message.data[9:]); continue
                     if self.player_enabled and audio_active and len(message.data) >= 9 and message.data[0] == 4:
                         self.count_audio(message.data[9:], audio_format)
                         continue

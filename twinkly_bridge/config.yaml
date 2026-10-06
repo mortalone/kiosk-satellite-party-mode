@@ -1,5 +1,5 @@
 name: Twinkly Bridge
-version: "0.1.4"
+version: "0.1.5"
 slug: twinkly_bridge
 description: Local Twinkly LED control and music spectrum receiver using xled_plus
 url: https://github.com/mortalone/kiosk-satellite-party-mode/tree/main/twinkly_bridge
@@ -26,6 +26,7 @@ options:
   light_delay_ms: 0
   music_pattern: mirror
   music_punch: 50
+  cover_colors: false
 schema:
   device_ip: str
   api_token: password
@@ -38,3 +39,4 @@ schema:
   light_delay_ms: int(-2000,2000)
   music_pattern: list(spectrum|mirror|pulse|wave|particles|tunnel)
   music_punch: int(0,100)
+  cover_colors: bool

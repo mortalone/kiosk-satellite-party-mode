@@ -1,3 +1,12 @@
+# 0.1.5
+
+- Receive a 64×64 album cover through Sendspin's artwork role alongside the silent player and visualizer roles; works with encrypted and legacy protocols.
+- Add calm Cover Mood with a slowly changing three-color palette and the selected color as fallback.
+- Add cover-colors toggle for every music pattern. Audio still controls movement/pulses; configured brightness remains the maximum.
+- Bound artwork to 256 KiB/512×512 and process a 32×32 thumbnail off the audio receiving loop. New covers replace pending covers instead of forming a queue.
+- Empty artwork clears the palette. Existing Twinkly ownership and restoration behavior are retained.
+- Protocol tests include real artwork delivery over both supported transports. Physical Flex color appearance still needs user testing.
+
 # 0.1.4
 
 - Add a live Calm ↔ Disco music slider in ingress, independent of the brightness limit and selected pattern.

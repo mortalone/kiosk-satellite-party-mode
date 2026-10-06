@@ -10,6 +10,7 @@ public final class PartySignalTest {
         check(PartySignal.bounded(null, false).length == 0, "missing frame");
         check(PartySignal.effect("unknown").equals("off"), "unknown effect");
         check(PartySignal.effect("radial").equals("radial"), "known effect");
+        check(PartySignal.lyrics("discolyrics") && PartySignal.effect("discolyrics").equals("discolyrics"), "disco lyrics mode");
         System.out.println("Party signal checks passed");
     }
     private static void check(boolean ok, String message) { if (!ok) throw new AssertionError(message); }

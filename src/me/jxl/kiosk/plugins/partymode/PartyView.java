@@ -155,7 +155,7 @@ final class PartyView extends FrameLayout {
                 effects.draw(canvas, getWidth(), getHeight(), effect, playing);
 
                 String status = effects.status();
-                if (!"lyrics".equals(effect) && !status.isEmpty()) line(canvas, status, 14 * density, getHeight() - 14 * density,
+                if (!PartySignal.lyrics(effect) && !status.isEmpty()) line(canvas, status, 14 * density, getHeight() - 14 * density,
                         getWidth() - 82 * density, 12 * sp, false, 0xDDFFFFFF);
             }
         }
@@ -180,7 +180,7 @@ final class PartyView extends FrameLayout {
         float density = getResources().getDisplayMetrics().density;
         float sp = getResources().getDisplayMetrics().scaledDensity;
         float areaLeft = 0, areaTop = 0, areaWidth = getWidth(), areaHeight = getHeight();
-        if (fullscreen && guestQr != null && !"lyrics".equals(effect)) {
+        if (fullscreen && guestQr != null && !PartySignal.lyrics(effect)) {
             boolean landscape = getWidth() >= getHeight();
             float side = Math.min(getWidth() * (landscape ? 0.27f : 0.46f), getHeight() * (landscape ? 0.55f : 0.26f));
             float x = landscape ? Math.max(16 * density, getWidth() * 0.035f) : (getWidth() - side) / 2;
@@ -205,7 +205,7 @@ final class PartyView extends FrameLayout {
             return;
         }
         java.util.List<PartyQueueModel.Track> tracks = model.tracks;
-        if (fullscreen && (!queueVisible || "lyrics".equals(effect))) {
+        if (fullscreen && (!queueVisible || PartySignal.lyrics(effect))) {
             java.util.List<PartyQueueModel.Track> selected = new java.util.ArrayList<>();
             for (PartyQueueModel.Track track : tracks) if (track.current) selected.add(track);
             tracks = selected;
@@ -223,7 +223,7 @@ final class PartyView extends FrameLayout {
         for (int i = 0; i < tracks.size(); i++) if (tracks.get(i).current) currentIndex = i;
         if (scrollOffset < 0) scrollOffset = Math.max(0, Math.min(maxScroll, currentIndex * (neighbor + gap) - (maxHeight - current) / 2));
         scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset));
-        float y = "lyrics".equals(effect) ? Math.max(0, getHeight() - current - 14 * density) : areaTop + (maxScroll > 0 ? 16 * density - scrollOffset : (areaHeight - total) / 2);
+        float y = PartySignal.lyrics(effect) ? Math.max(0, getHeight() - current - 14 * density) : areaTop + (maxScroll > 0 ? 16 * density - scrollOffset : (areaHeight - total) / 2);
         int queueSave = canvas.save(); canvas.clipRect(areaLeft, areaTop, areaLeft + areaWidth, areaTop + areaHeight);
         for (int i = 0; i < tracks.size(); i++) {
             PartyQueueModel.Track track = tracks.get(i);

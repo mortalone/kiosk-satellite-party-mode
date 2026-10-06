@@ -12,8 +12,9 @@ final class PartySignal {
         }
         return result;
     }
+    static boolean lyrics(String value) { return "lyrics".equals(value) || "discolyrics".equals(value); }
     static String effect(String value) {
-        for (String mode : new String[] {"off", "spectrum", "mirror", "radial", "wave", "particles", "tunnel", "lyrics"})
+        for (String mode : new String[] {"off", "spectrum", "mirror", "radial", "wave", "particles", "tunnel", "lyrics", "discolyrics"})
             if (mode.equals(value)) return mode;
         return "off";
     }

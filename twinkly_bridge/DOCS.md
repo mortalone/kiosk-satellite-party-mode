@@ -186,3 +186,15 @@ Tests cover the user's chase → green → solid → off → chase sequence, rea
 HTTP authentication and UDP encoding against a mock controller, actual encrypted
 Sendspin exchange with the official reference server, classic WebSocket frames,
 playback timestamps, silence, pause/seek clearing, and stale UI polling.
+
+## Albumcover · 0.1.5
+
+Vælg **Cover Mood** i ingress for et roligt lys i coverets farver, uafhængigt af
+lydens styrke. Eller slå **Coverfarver** til under **Musik** for at farve det valgte
+musikmønster med coverpaletten; Roligt ↔ Disco styrer stadig pulsens tydelighed.
+Lysstyrke sætter maksimum. Uden cover bruges den valgte farve.
+
+Cover modtages fra samme Sendspin-gruppe som musikframes, så der kræves ingen
+HA-lampeintegration eller ekstra API-token. Bridge annoncerer nu også artwork-rollen;
+genstart add-on efter opdatering, så MA kan genforhandle rollerne. Startupoptionen
+`cover_colors: true` bevarer valget efter genstart (ingressændringer er midlertidige).

@@ -54,13 +54,13 @@ final class PartyEffects {
         energy /= levels.length;
         double time = SystemClock.elapsedRealtime() / 1000.0;
         paint.setStyle(Paint.Style.FILL);
-        if ("spectrum".equals(mode) || "mirror".equals(mode) || "lyrics".equals(mode)) {
+        if ("spectrum".equals(mode) || "mirror".equals(mode) || PartySignal.lyrics(mode)) {
             float cell = width / levels.length;
             boolean mirror = "mirror".equals(mode);
             float baseline = mirror ? height * 0.54f : height * 0.92f;
             for (int i = 0; i < levels.length; i++) {
-                float x = i * cell, amplitude = levels[i] * height * ("lyrics".equals(mode) ? 0.12f : mirror ? 0.40f : 0.75f);
-                paint.setColor(color(i / (float) levels.length, "lyrics".equals(mode) ? 70 : 215));
+                float x = i * cell, amplitude = levels[i] * height * (PartySignal.lyrics(mode) ? 0.12f : mirror ? 0.40f : 0.75f);
+                paint.setColor(color(i / (float) levels.length, PartySignal.lyrics(mode) ? 70 : 215));
                 c.drawRect(x + cell * 0.15f, baseline - amplitude, x + cell * 0.85f, baseline, paint);
                 if (mirror) {
                     paint.setAlpha(85);

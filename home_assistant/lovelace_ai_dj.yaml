@@ -1,0 +1,18 @@
+type: vertical-stack
+cards:
+  - type: entities
+    title: AI DJ
+    entities:
+      - input_text.party_ai_request
+      - input_boolean.party_ai_translate
+      - input_select.party_ai_enqueue
+      - input_text.party_ai_status
+  - type: button
+    name: Find musik til stemningen
+    icon: mdi:headphones
+    tap_action:
+      action: perform-action
+      perform_action: script.party_ai_dj
+      data:
+        # Replace with your Music Assistant group entity.
+        player: media_player.your_music_assistant_group

@@ -3,7 +3,7 @@
   "apiVersion": 1,
   "id": "party-mode",
   "name": "Party Mode",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "minAndroidSdk": 26,
   "entryClass": "me.jxl.kiosk.plugins.partymode.PartyModePlugin",
   "description": "Standalone full-screen Party queue, MA guest QR and native audio visualizations, with independent visibility and HA actions.",
@@ -12,13 +12,14 @@
   "capabilities": [
     "overlay",
     "host.read",
-    "host.control"
+    "host.control",
+    "entities"
   ],
   "settings": [
     {
       "key": "speakerEntity",
       "type": "entity",
-      "title": "Speaker / højttaler",
+      "title": "Speaker / h\u00f8jttaler",
       "default": "",
       "group": "Party",
       "description": "Music Assistant HA media_player for the speaker group whose queue Party should follow."
@@ -103,7 +104,7 @@
       "title": "Volume controls",
       "default": "Buttons",
       "group": "Presentation",
-      "description": "Compact −/+ controls by default, or a slim tinted slider. Independent of playback controls and visualization gain.",
+      "description": "Compact \u2212/+ controls by default, or a slim tinted slider. Independent of playback controls and visualization gain.",
       "options": [
         "Off",
         "Buttons",
@@ -311,6 +312,10 @@
     {
       "id": "playbackToggle",
       "title": "Show/hide playback controls (saved)"
+    },
+    {
+      "id": "partyEffectDiscolyrics",
+      "title": "Party visualizer: Disco Lyrics (saved)"
     }
   ],
   "groups": [

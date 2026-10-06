@@ -1,5 +1,7 @@
 """One device owner, bounded network I/O, and a latest-frame music mailbox."""
 import colorsys
+import io
+from PIL import Image
 import hmac
 import ipaddress
 import json
@@ -12,7 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 LOG = logging.getLogger("twinkly_bridge")
-MODES = {"color", "rainbow", "chase", "music", "off", "restore"}
+MODES = {"color", "rainbow", "chase", "music", "off", "restore", "mood"}
 PATTERNS = {"spectrum", "mirror", "pulse", "wave", "particles", "tunnel"}
 
 
@@ -21,6 +23,9 @@ def validate_control(data):
     if mode is not None and mode not in MODES:
         raise ValueError("Unknown mode")
     result = {"mode": mode} if mode is not None else {}
+    if "cover_colors" in data:
+        if not isinstance(data["cover_colors"], bool): raise ValueError("cover_colors must be boolean")
+        result["cover_colors"] = data["cover_colors"]
     if "pattern" in data:
         if data["pattern"] not in PATTERNS:
             raise ValueError("Unknown music pattern")
@@ -84,12 +89,38 @@ class MusicDynamics:
         return list(self.bands), boost(loudness), self.pulse, modulation
 
 
+def artwork_palette(data):
+    """Small, bounded image processing; ignore near-black/white margins when possible."""
+    if not data: return []
+    if len(data) > 262144: raise ValueError("Artwork exceeds 256 KiB")
+    with Image.open(io.BytesIO(data)) as image:
+        if image.width * image.height > 262144: raise ValueError("Artwork resolution too large")
+        image.thumbnail((32, 32)); image = image.convert("RGB")
+        quantized = image.quantize(colors=8, method=Image.Quantize.MEDIANCUT)
+        palette = quantized.getpalette(); candidates = []
+        for count, index in quantized.getcolors():
+            rgb = tuple(palette[index*3:index*3+3]); high, low = max(rgb), min(rgb)
+            score = count * (0.25 + (high-low)/255)
+            if high < 24 or low > 235: score *= 0.05
+            candidates.append((score, rgb))
+        candidates.sort(reverse=True)
+        return [rgb for _, rgb in candidates[:3]]
+
+
+def palette_color(palette, position):
+    index = max(0, min(1, position)) * (len(palette)-1)
+    left = int(index); right = min(len(palette)-1, left+1); mix = index-left
+    return tuple(round(a+(b-a)*mix) for a, b in zip(palette[left], palette[right]))
+
+
 def frame_colors(mode, count, phase, color, bands, pattern="spectrum", loudness=0, peak=0,
-                 punch=0, pulse=0, modulation=1):
+                 punch=0, pulse=0, modulation=1, palette=None):
     energy = max(loudness, sum(bands) / len(bands) if bands else 0)
     bass = sum(bands[:max(1, len(bands)//4)]) / max(1, len(bands)//4) if bands else 0
     def pixel(i):
         fraction = i / max(1, count - 1)
+        if mode == "mood":
+            return palette_color(palette, fraction) if palette else color
         if mode == "color":
             return color
         if mode == "chase":
@@ -110,6 +141,9 @@ def frame_colors(mode, count, phase, color, bands, pattern="spectrum", loudness=
                 level = energy * max(0, 1 - ((distance - phase * 2) % 1) * 6)
             if pattern != "pulse":
                 level *= modulation
+            if palette:
+                tint = palette_color(palette, position)
+                return tuple(round(c * min(1, max(0, level))) for c in tint)
             if pattern in {"pulse", "wave", "particles", "tunnel"}:
                 return tuple(round(c * min(1, max(0, level))) for c in color)
             rgb = colorsys.hsv_to_rgb(0.72 - 0.72 * position, 1, min(1, max(0, level)))
@@ -183,6 +217,7 @@ class Bridge:
         self.fps = max(5, min(30, int(options.get("fps", 20))))
         self.settings = {"mode": "restore", "brightness": int(options.get("brightness", 30)),
                          "speed": float(options.get("speed", 1)), "color": (255, 64, 128),
+                         "cover_colors": options.get("cover_colors", False),
                          "pattern": options.get("music_pattern", "mirror"), "gain": 1.0,
                          "punch": validate_control({"punch": options.get("music_punch", 50)})["punch"]}
         self.factory = factory
@@ -193,8 +228,16 @@ class Bridge:
         self.bands, self.bands_at = [], 0
         self.loudness, self.peak = 0.0, 0.0
         self.info = {"connected": False, "leds": 0, "error": "", "applied_mode": "restore", "recoveries": 0}
+        self.cover_data = None
+        self.cover_palette = []
         self.sendspin = None
         self.thread = threading.Thread(target=self.run, daemon=True)
+
+    def artwork(self, data):
+        if len(data) > 262144: return
+        with self.lock:
+            self.cover_data = bytes(data)
+        self.wake.set()
 
     def control(self, data):
         update = validate_control(data)
@@ -230,6 +273,8 @@ class Bridge:
                     "pattern": self.settings["pattern"], "gain": self.settings["gain"],
                     "punch": self.settings["punch"],
                     "color": "#" + "".join(f"{c:02x}" for c in self.settings["color"]),
+                    "cover_colors": self.settings["cover_colors"],
+                    "cover_palette": ["#"+"".join(f"{c:02x}" for c in rgb) for rgb in self.cover_palette],
                     "revision": self.revision,
                     "audio_fresh": time.monotonic() - self.bands_at < 1.5}
         result["sendspin"] = self.sendspin.status() if self.sendspin else {"connected": False, "state": "disabled"}
@@ -237,6 +282,7 @@ class Bridge:
 
     def run(self):
         mode = "restore"
+        palette = []; target_palette = []
         device, original, applied_revision = None, None, -1
         last_brightness = None
         next_retry = 0
@@ -247,11 +293,23 @@ class Bridge:
             while not self.stopping.is_set():
                 self.wake.clear()
                 with self.lock:
+                    cover_data, self.cover_data = self.cover_data, None
                     settings, revision = dict(self.settings), self.revision
                     applied_mode = self.info["applied_mode"]
                     bands = list(self.bands) if time.monotonic() - self.bands_at < 1.5 else []
                     loudness, peak = (self.loudness, self.peak) if bands else (0, 0)
                     self.peak *= 0.85
+                if cover_data is not None:
+                    try:
+                        target_palette = artwork_palette(cover_data)
+                        if not target_palette: palette = []
+                        with self.lock: self.cover_palette = target_palette
+                    except (ValueError, OSError) as error:
+                        LOG.warning("Artwork ignored: %s", error)
+                if target_palette:
+                    if not palette: palette = list(target_palette)
+                    else:
+                        palette = [tuple(a+(b-a)*0.04 for a,b in zip(palette[min(i,len(palette)-1)],rgb)) for i,rgb in enumerate(target_palette)]
                 mode = settings["mode"]
                 if mode == "restore" and device is None:
                     self.wake.wait(0.2)
@@ -296,7 +354,8 @@ class Bridge:
                             settings["gain"], settings["punch"], dt)
                         colors = frame_colors(mode, device.num_leds, phase, settings["color"], smooth,
                                               settings["pattern"], level, peak,
-                                              settings["punch"], pulse, modulation)
+                                              settings["punch"], pulse, modulation,
+                                              palette if settings["cover_colors"] or mode == "mood" else None)
                         device.show_rt_frame([device.make_pixel(*rgb) for rgb in colors])
                     applied_revision = revision
                     with self.lock:

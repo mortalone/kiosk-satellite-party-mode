@@ -21,26 +21,36 @@ public final class PartyQaActivity extends Activity {
     private final Handler main = new Handler();
     private final PartyModePlugin plugin = new PartyModePlugin();
     private ServerSocket server;
+    private boolean publishedPartyState;
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
         @Override public void onReceive(Context c, Intent intent) {
             String mode = intent.getStringExtra("mode");
             try {
                 call("dismissSearch");
-                if ("search".equals(mode) || "placement".equals(mode)) {
+                if ("search".equals(mode) || "placement".equals(mode) || "ai".equals(mode)) {
                     call("showSearch"); Dialog dialog = (Dialog)field("searchDialog");
+                    if ("ai".equals(mode)) findText(dialog.getWindow().getDecorView(), "AI DJ · søg efter stemning").performClick();
                     EditText input = findEdit(dialog.getWindow().getDecorView()); input.setText("party"); input.onEditorAction(EditorInfo.IME_ACTION_SEARCH);
                     if ("placement".equals(mode)) main.postDelayed(() -> { Dialog d = (Dialog)field("searchDialog"); TextView t = findText(d.getWindow().getDecorView(), "Aftenlys"); if (t == null) throw new AssertionError("search results absent"); ((View)t.getParent().getParent()).performClick(); }, 700);
                 } else if ("settings".equals(mode)) call("showPartyMenu", View.class, new View(PartyQaActivity.this));
                 else if ("playlists".equals(mode)) call("showPlaylists");
-                else if ("lyrics".equals(mode)) call("setPartyEffect", String.class, "lyrics");
+                else if ("lyrics".equals(mode) || "discolyrics".equals(mode)) call("setPartyEffect", String.class, mode);
+                else if ("switch".equals(mode)) {
+                    plugin.onEvent("switch.active", Collections.singletonMap("on", false));
+                    main.postDelayed(() -> {
+                        if (publishedPartyState || Boolean.TRUE.equals(field("partyFullscreen"))) throw new AssertionError("HA switch did not stop Party");
+                        plugin.onEvent("switch.active", Collections.singletonMap("on", true));
+                    }, 150);
+                }
                 else if ("main".equals(mode)) call("setPartyEffect", String.class, "mirror");
                 main.postDelayed(() -> {
                     PartyView view = (PartyView)field("partyView");
+                    if ("switch".equals(mode) && !publishedPartyState) throw new AssertionError("HA switch did not report Party active");
                     if (view == null) throw new AssertionError("Party root missing");
                     if ("main".equals(mode) && hasDescription(getWindow().getDecorView(), "Afslut Party Mode")) throw new AssertionError("default Close visible");
                     if ("settings".equals(mode) && !hasText(((Dialog)field("searchDialog")).getWindow().getDecorView(), "VISUALISERING")) throw new AssertionError("new menu missing");
                     if ("playlists".equals(mode) && !hasText(((Dialog)field("searchDialog")).getWindow().getDecorView(), "Fredagsfest")) throw new AssertionError("favorites missing");
-                    if ("lyrics".equals(mode) && (!((PartyLyrics)field("lyrics")).synced || ((PartyLyrics)field("lyrics")).lines.isEmpty())) throw new AssertionError("on-demand MA lyrics not displayed");
+                    if (("lyrics".equals(mode) || "discolyrics".equals(mode)) && (!((PartyLyrics)field("lyrics")).synced || ((PartyLyrics)field("lyrics")).lines.isEmpty())) throw new AssertionError("on-demand MA lyrics not displayed");
                     if ("placement".equals(mode) && field("selectionDialog") == null) throw new AssertionError("placement panel missing");
                     android.util.Log.i("PARTY_QA", "QA_READY " + mode + " hardware=" + view.hardwareCanvas());
                 }, 1600);
@@ -62,6 +72,7 @@ public final class PartyQaActivity extends Activity {
                     Map<String,Object> response = new HashMap<>(); response.put("state", "playing"); response.put("attributes", attrs); callback.onResult(true, response, null);
                 } else callback.onResult(true, Collections.emptyMap(), null);
             }
+            @Override public void publishSwitch(String key, String name, boolean state) { if (!"active".equals(key)) throw new AssertionError(key); publishedPartyState = state; }
             @Override public void subscribe(String event) {} @Override public void unsubscribe(String event) {}
             @Override public void showWindow(String a, String b, String c) {} @Override public void hideWindow() {}
             @Override public void log(String message) { android.util.Log.i("PARTY_QA", message); }

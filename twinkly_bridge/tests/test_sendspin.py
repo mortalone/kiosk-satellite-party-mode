@@ -103,7 +103,7 @@ class ProtocolTest(unittest.IsolatedAsyncioTestCase):
                 await asyncio.wait_for(socket_ready.wait(),2)
                 await eventually_async(lambda: source.status()['clock_synced'])
                 hello = received[0]['payload']
-                self.assertEqual(hello['supported_roles'],['player@v1','visualizer@v1'] if player else ['visualizer@v1'])
+                self.assertEqual(hello['supported_roles'],['player@v1','visualizer@v1','artwork@v1'] if player else ['visualizer@v1','artwork@v1'])
                 self.assertEqual('player@v1_support' in hello, player)
                 socket = live_socket[0]
                 if player:
@@ -167,7 +167,7 @@ class ProtocolTest(unittest.IsolatedAsyncioTestCase):
                     await server.trust_unpaired(identity.peer_id)
                     await eventually_async(lambda: source.status()['connected'])
                     client = server.get_client(identity.peer_id)
-                    self.assertEqual(set(client.negotiated_role_ids),{'player@v1','visualizer@v1'} if player else {'visualizer@v1'})
+                    self.assertEqual(set(client.negotiated_role_ids),{'player@v1','visualizer@v1','artwork@v1'} if player else {'visualizer@v1','artwork@v1'})
                     await eventually_async(lambda: client.role('visualizer@v1') is not None)
                     client.group.start_stream()
                     await eventually_async(lambda: source.status()['playback']=='playing')
@@ -187,6 +187,8 @@ class ProtocolTest(unittest.IsolatedAsyncioTestCase):
                         await eventually_async(lambda: role.volume==37)
                         role.set_mute(True)
                         await eventually_async(lambda: role.muted)
+                    client.role('artwork@v1').send_artwork(0, b'cover-test', time.monotonic_ns()//1000)
+                    await eventually_async(lambda: bridge.cover_data == b'cover-test')
                     client.send_role_message('visualizer',StreamStartMessage(payload=StreamStartPayload(visualizer=StreamStartVisualizer.from_support(source.support))))
                     # Give the protocol time filter its two initial samples.
                     await asyncio.sleep(0.6)

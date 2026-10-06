@@ -102,13 +102,14 @@ public final class PartyModePlugin implements KioskPlugin {
     private long lyricsLastPoll, lyricsGeneration;
     private final Runnable lyricTick = new Runnable() {
         @Override public void run() {
-            if (host == null || !partyFullscreen || !"lyrics".equals(partyEffect) || lyricsView == null) return;
+            if (host == null || !partyFullscreen || !PartySignal.lyrics(partyEffect) || lyricsView == null) return;
             lyricsView.updatePosition(partyView == null ? estimatedMediaPosition() : partyView.elapsedSeconds());
             main.postDelayed(this, 250);
         }
     };
     private long searchGeneration;
     private String reportedGuestStatus = "";
+    private Boolean reportedPartyState;
     private boolean partyPollPending, partyGuestPending, partyGuestChangePending;
     private long partyLastPoll, partyLastSuccess, partyGuestLastPoll, partyGuestLastSuccess, partyLastPostpone;
     private volatile long partyGeneration, partyGuestGeneration;
@@ -147,6 +148,7 @@ public final class PartyModePlugin implements KioskPlugin {
             context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit()
                     .putBoolean("party_fullscreen", false).putLong("party_until_ms", 0).apply();
             context.sendBroadcast(new Intent(PARTY_EVENT).setPackage(context.getPackageName()));
+            reportedPartyState = null; publishPartyState();
             configureOnMain(settings);
             readKioskMusicAssistantConfig();
             host.executeCommand("getDashboardState", Collections.emptyMap(), (ok, data, error) -> {
@@ -241,6 +243,9 @@ public final class PartyModePlugin implements KioskPlugin {
         });
     }
     @Override public synchronized void onEvent(String event, Map<String, Object> payload) {
+        if ("switch.active".equals(event)) {
+            execute(Boolean.TRUE.equals(payload.get("on")) ? "show" : "hide", Collections.emptyMap()); return;
+        }
         if (!event.startsWith("ks.ha.entity.")) return;
         String id = payload.get("entityId") == null ? event.substring("ks.ha.entity.".length()) : String.valueOf(payload.get("entityId"));
         String state = payload.get("state") == null ? "" : String.valueOf(payload.get("state"));
@@ -328,7 +333,13 @@ public final class PartyModePlugin implements KioskPlugin {
         }
         ensurePartyView(); updateParty();
     }
+    private void publishPartyState() {
+        if (host == null || Boolean.valueOf(partyFullscreen).equals(reportedPartyState)) return;
+        try { host.publishSwitch("active", "Party Mode", partyFullscreen); reportedPartyState = partyFullscreen; }
+        catch (Throwable error) { host.log("Party switch unavailable: " + error.getMessage()); }
+    }
     private void publishPresentation() {
+        publishPartyState();
         context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit()
                 .putBoolean("party_fullscreen", partyFullscreen).putLong("party_until_ms", partyFullscreen ? System.currentTimeMillis() + 30000 : 0)
                 .putString("effect", partyEffect).putInt("gain", gain).putInt("fps", fps)
@@ -386,8 +397,8 @@ public final class PartyModePlugin implements KioskPlugin {
             pp.topMargin = dp(10); pp.leftMargin = dp(allowSearch ? 68 : 12); root.addView(playlists, pp);
             playlists.setOnClickListener(v -> showPlaylists());
         }
-        if ("lyrics".equals(partyEffect)) {
-            lyricsView = new PartyLyricsView(activity);
+        if (PartySignal.lyrics(partyEffect)) {
+            lyricsView = new PartyLyricsView(activity, "discolyrics".equals(partyEffect));
             FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-1, -1);
             lp.topMargin = body.topMargin; lp.bottomMargin = body.bottomMargin + dp(116);
             root.addView(lyricsView, lp); lyricsView.setLyrics(lyrics);
@@ -571,11 +582,19 @@ public final class PartyModePlugin implements KioskPlugin {
         LinearLayout field = new LinearLayout(activity); field.setGravity(Gravity.CENTER_VERTICAL);
         field.setBackground(PartyUi.shape(activity, 0xFF222C38, 18, true));
         EditText input = new EditText(activity); input.setSingleLine(true); input.setTextColor(PartyUi.INK); input.setHintTextColor(PartyUi.MUTED);
+        final boolean[] moodSearch = {false};
         input.setTextSize(17); input.setHint("Titel eller kunstner"); input.setBackgroundColor(Color.TRANSPARENT);
         input.setPadding(dp(14), 0, dp(4), 0); input.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
         field.addView(input, new LinearLayout.LayoutParams(0, dp(56), 1));
         ImageView submit = PartyUi.icon(activity, "search", "Søg i Music Assistant"); field.addView(submit, new LinearLayout.LayoutParams(dp(48), dp(48)));
         LinearLayout.LayoutParams fl = new LinearLayout.LayoutParams(-1, dp(56)); fl.bottomMargin = dp(16); layout.addView(field, fl);
+        TextView mode = PartyUi.action(activity, "AI DJ · søg efter stemning", false);
+        layout.addView(mode, new LinearLayout.LayoutParams(-1, dp(48)));
+        mode.setOnClickListener(v -> {
+            moodSearch[0] = !moodSearch[0]; searchGeneration++;
+            mode.setText(moodSearch[0] ? "AI DJ aktiv · skift til titel/kunstner" : "AI DJ · søg efter stemning");
+            input.setHint(moodSearch[0] ? "Calm jazz with dominant saxophone" : "Titel eller kunstner");
+        });
         ScrollView scroll = new ScrollView(activity); scroll.setVerticalScrollBarEnabled(false);
         LinearLayout results = panelBody(activity); scroll.addView(results); layout.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         TextView status = PartyUi.text(activity, "Find et nummer til jukeboxen", 15, PartyUi.MUTED); results.addView(status);
@@ -584,13 +603,14 @@ public final class PartyModePlugin implements KioskPlugin {
             String query = input.getText().toString().trim(); if (query.isEmpty() || query.length() > 256 || io == null) return;
             InputMethodManager keyboard = (InputMethodManager) activity.getSystemService(Context.INPUT_METHOD_SERVICE);
             if (keyboard != null) keyboard.hideSoftInputFromWindow(input.getWindowToken(), 0);
-            input.clearFocus(); final long request = ++searchGeneration;
+            input.clearFocus(); final long request = ++searchGeneration; final boolean aiDj = moodSearch[0];
             final String base = maBase(), token = maToken; results.removeAllViews(); status.setText("Søger…"); results.addView(status);
             io.execute(() -> {
                 java.util.List<PartyJukebox.Result> found = null;
                 try {
-                    Object response = partyRequest(base, token, "music/search", new JSONObject().put("search_query", query)
-                            .put("media_types", new JSONArray().put("track")).put("limit", 20).put("library_only", false));
+                    JSONObject args = new JSONObject().put("search_query", query).put("media_types", new JSONArray().put("track")).put("limit", 20);
+                    if (aiDj) args.put("providers", new JSONArray().put("sonic_similarity"));
+                    Object response = partyRequest(base, token, "music/search", args);
                     if (response instanceof JSONObject) found = PartyJukebox.results((JSONObject) response, base);
                 } catch (Throwable ignored) {}
                 final java.util.List<PartyJukebox.Result> matches = found;
@@ -598,7 +618,7 @@ public final class PartyModePlugin implements KioskPlugin {
                     if (!validPanel(queue, generation, request) || !allowSearch) return;
                     results.removeAllViews();
                     if (matches == null || matches.isEmpty()) {
-                        status.setText(matches == null ? "Søgning mislykkedes. Kontrollér MA-forbindelsen." : "Ingen numre fundet"); results.addView(status); return;
+                        status.setText(matches == null ? "Søgning mislykkedes. Kontrollér MA-forbindelsen." : aiDj ? "Ingen stemningsforslag endnu. Aktivér Sonic Similarity → free-text search i MA, analysér biblioteket og prøv igen efter modelindlæsning. Engelske beskrivelser anbefales i første test." : "Ingen numre fundet"); results.addView(status); return;
                     }
                     for (PartyJukebox.Result match : matches) addMediaRow(activity, results, match, request, queue, generation,
                             () -> { if (allowSearch) chooseMedia(activity, match, false, queue, generation); });
@@ -751,7 +771,7 @@ public final class PartyModePlugin implements KioskPlugin {
         if (lyricsView != null) lyricsView.setLyrics(lyrics);
     }
     private void pollPartyLyrics() {
-        if (!partyFullscreen || !"lyrics".equals(partyEffect) || lyricsPending || io == null || partyTrackMedia == null || !lyrics.lines.isEmpty()) return;
+        if (!partyFullscreen || !PartySignal.lyrics(partyEffect) || lyricsPending || io == null || partyTrackMedia == null || !lyrics.lines.isEmpty()) return;
         long now = SystemClock.elapsedRealtime(); if (now - lyricsLastPoll < 30000) return; lyricsLastPoll = now;
         final String id = partyTrackMedia.optString("item_id", ""), provider = partyTrackMedia.optString("provider", "");
         if (id.isEmpty() || provider.isEmpty()) return;
@@ -956,6 +976,7 @@ public final class PartyModePlugin implements KioskPlugin {
                 if (!partyFullscreen || partyView == null || "off".equals(partyEffect)) return;
                 long age = SystemClock.elapsedRealtime() - intent.getLongExtra("at", 0);
                 if (age < 0 || age > 1000) return;
+                if (lyricsView != null) lyricsView.acceptAudio(intent.getFloatArrayExtra("bands"));
                 partyView.acceptAudio(intent.getFloatArrayExtra("bands"), intent.getFloatArrayExtra("waveform"),
                         intent.getIntExtra("fps", 20), intent.getBooleanExtra("demo", false));
             }
@@ -970,8 +991,8 @@ public final class PartyModePlugin implements KioskPlugin {
         LinearLayout body = panelBody(a), rows = panelBody(a); ScrollView scroll = new ScrollView(a);
         scroll.setVerticalScrollBarEnabled(false); scroll.addView(rows); body.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         panelHeading(rows, "VISUALISERING");
-        String[] ids = {"off", "spectrum", "mirror", "radial", "wave", "particles", "tunnel", "lyrics"};
-        String[] names = {"Ingen visualisering", "Neon Spectrum", "Mirror Spectrum", "Radial Pulse", "Waveform", "Star Particles", "Neon Tunnel", "Lyrics · syng med"};
+        String[] ids = {"off", "spectrum", "mirror", "radial", "wave", "particles", "tunnel", "lyrics", "discolyrics"};
+        String[] names = {"Ingen visualisering", "Neon Spectrum", "Mirror Spectrum", "Radial Pulse", "Waveform", "Star Particles", "Neon Tunnel", "Lyrics · syng med", "Disco Lyrics · neon og pulser"};
         for (int i = 0; i < ids.length; i++) {
             final String effect = ids[i]; addPanelAction(rows, names[i], effect.equals(partyEffect), () -> { setPartyEffect(effect); showPartyMenu(anchor); });
         }

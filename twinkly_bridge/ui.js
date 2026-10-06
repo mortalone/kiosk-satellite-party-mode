@@ -12,7 +12,7 @@ async function readApiResponse(response) {
 class ControlQueue {
   constructor(send, onState, onError) {
     this.send = send; this.onState = onState; this.onError = onError;
-    this.state = {mode:'restore', color:'#ff4080', brightness:30, speed:1, pattern:'mirror', gain:1, punch:50};
+    this.state = {mode:'restore', color:'#ff4080', brightness:30, speed:1, pattern:'mirror', gain:1, punch:50, cover_colors:false};
     this.pending = null; this.sending = false; this.epoch = 0; this.revision = -1;
   }
   accept(status, epoch) {
@@ -59,6 +59,7 @@ if (typeof document !== 'undefined') {
     document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('selected', b.dataset.mode === state.mode));
     document.querySelectorAll('[data-pattern]').forEach(b => b.classList.toggle('selected', b.dataset.pattern === state.pattern));
     for (const id of ['color','brightness','speed','gain','punch']) $(id).value = state[id];
+    $('coverColors').checked = state.cover_colors;
     $('brightnessValue').textContent = state.brightness+'%';
     $('speedValue').textContent = state.speed+'×';
     $('gainValue').textContent = state.gain+'×';
@@ -86,6 +87,7 @@ if (typeof document !== 'undefined') {
     }
     finally { refreshing = false; }
   }
+  $('coverColors').addEventListener('change', () => controls.change({cover_colors:$('coverColors').checked}));
   document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => controls.change({mode:b.dataset.mode})));
   document.querySelectorAll('[data-pattern]').forEach(b => b.addEventListener('click', () => controls.change({mode:'music', pattern:b.dataset.pattern})));
   let punchTimer = null;

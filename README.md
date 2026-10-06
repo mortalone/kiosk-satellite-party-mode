@@ -101,3 +101,19 @@ add-on with isolated xled/xled_plus libraries, an ingress control panel and indi
 LED test patterns. Add this repository URL in the Home Assistant add-on store to
 install it. See [configuration and installation](twinkly_bridge/DOCS.md). Version 0.1.1 connects directly to Music Assistant through Sendspin and includes
 six Party Mode inspired LED patterns. No Kiosk audio relay is needed.
+
+### Party switch, Disco Lyrics and mood search (0.1.8)
+
+Enable the plugin and look under the Kiosk device in HA for the new **Party Mode**
+switch. It reports Party's activation state, accepts on/off commands and follows
+start/stop actions and close gestures. Visibility/playback conditions can refuse
+activation or switch it off; disabling the plugin makes the entity unavailable.
+
+Choose **Disco Lyrics** in the Party settings menu or its HA action. It uses the
+same MA lyrics as ordinary Lyrics, highlights synchronized lines and adds bounded
+color/glow/scale updates from the existing audio analyzer (no extra FFT). Unsynced
+lyrics are displayed without simulated timing.
+
+The search sheet now includes an experimental **AI DJ** mood-search toggle. See
+[AI DJ setup and Lovelace examples](home_assistant/README.md) for dependencies,
+limitations, optional Danish translation and the future voice entry point.

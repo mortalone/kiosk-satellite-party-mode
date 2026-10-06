@@ -8,12 +8,15 @@
 <section class="card"><div id="status" role="status">Henter status…</div><p id="source"></p><p id="error" role="alert"></p><small id="diagnostics"></small></section>
 <section class="card"><div class="grid">
 <button data-mode="color">Ensfarvet<small>En rolig, fast farve</small></button>
+<button data-mode="mood">Cover Mood<small>Rolig farvepalette fra albumcoveret</small></button>
 <button data-mode="rainbow">Regnbue<small>Farver gennem hele lyset</small></button>
 <button data-mode="chase">Løbelys<small>Test individuel LED-styring</small></button>
 <button data-mode="music">Musik<small>Følger Music Assistant via Sendspin</small></button>
 <button data-mode="restore">Tilbage til Twinkly<small>Gendan tidligere tilstand</small></button>
 <button data-mode="off">Sluk<small>Sluk lyset</small></button>
 </div>
+<div class="row"><label for="coverColors">Coverfarver</label><input id="coverColors" type="checkbox"><span>Brug albumcoverets farver i musikmønstre</span></div>
+<p>Cover Mood lyser roligt uden at følge lyden. Uden cover bruges den valgte farve. Musik følger stadig lydens puls.</p>
 <div class="row"><label for="color">Farve</label><input id="color" type="color" value="#ff4080"></div>
 <div class="row"><label for="brightness">Lysstyrke</label><input id="brightness" type="range" min="0" max="100" value="30"><output id="brightnessValue">30%</output></div>
 <div class="row"><label for="speed">Hastighed</label><input id="speed" type="range" min="0.1" max="5" step="0.1" value="1"><output id="speedValue">1×</output></div>
