@@ -1,3 +1,10 @@
+# 0.1.2
+
+- Optional video captions as lyrics, with original timestamps exposed through OpenSubsonic songLyrics v1.
+- Uploader captions enabled by default; automatic captions require explicit opt-in.
+- Persistent caption cache, language selection, and bounded background lookup prevent caption errors from stopping playback.
+- Danish labels for the new settings and coverage for JSON3/VTT parsing, configuration, caching, and failed/slow lookups.
+
 # 0.1.1
 
 - Fix playback being aborted during track lookup: legacy getLyrics now returns the standard not-found response that Music Assistant handles.
