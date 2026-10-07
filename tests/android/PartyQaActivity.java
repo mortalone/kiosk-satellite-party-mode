@@ -168,6 +168,10 @@ public final class PartyQaActivity extends Activity {
         if(cmd.equals("players/get"))return new JSONObject().put("player_id","qa-group").put("available",true).put("group_volume",42);
         if(cmd.equals("music/search")){JSONArray tracks=new JSONArray();for(int i=4;i<9;i++)tracks.put(media(i));return new JSONObject().put("tracks",tracks);}
         if(cmd.equals("music/playlists/library_items")){JSONArray items=new JSONArray();String[] names={"Fredagsfest","Rolig aften","Sommer i haven"};for(int i=0;i<3;i++)items.put(media(i).put("name",names[i]).put("uri","library://playlist/"+i).put("favorite",true));return items;}
+        if(cmd.equals("music/tracks/similar_tracks")) {
+            if (!"4".equals(args.optString("item_id")) || !"library".equals(args.optString("provider_instance_id_or_domain"))) throw new AssertionError("row button used wrong track");
+            return new JSONArray().put(media(4)).put(media(5));
+        }
         if(cmd.equals("music/tracks/get"))return media(4);
         if(cmd.equals("metadata/get_track_lyrics")) {
             if (!"library://track/4".equals(args.getJSONObject("track").optString("uri"))) throw new AssertionError("wrong lyrics track");
