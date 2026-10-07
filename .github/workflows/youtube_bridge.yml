@@ -20,7 +20,9 @@ jobs:
       - run: pip install -r youtube_bridge/requirements-test.txt
       - run: python -m unittest discover -s youtube_bridge/tests -v
       - name: Build app container
-        run: docker build --build-arg BUILD_VERSION=0.1.0 --build-arg BUILD_ARCH=amd64 -t youtube-bridge:test youtube_bridge
+        run: |
+          version=$(sed -n 's/^version: "\(.*\)"/\1/p' youtube_bridge/config.yaml)
+          docker build --build-arg BUILD_VERSION="$version" --build-arg BUILD_ARCH=amd64 -t youtube-bridge:test youtube_bridge
       - name: Check startup and protocol inside container
         run: |
           mkdir /tmp/youtube-options
@@ -30,6 +32,7 @@ jobs:
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:18102/health; then
               curl --fail --silent 'http://127.0.0.1:18102/rest/ping.view?u=youtube&p=test-password&f=json' | python -c 'import json,sys; assert json.load(sys.stdin)["subsonic-response"]["status"] == "ok"'
+              docker exec youtube-test python -c 'import captions; assert captions.parse_captions("{\"events\": []}", "json3") == []'
               docker exec youtube-test node --version
               docker exec youtube-test python -m yt_dlp --version
               exit 0
