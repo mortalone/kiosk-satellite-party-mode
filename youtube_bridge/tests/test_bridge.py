@@ -45,6 +45,9 @@ class ContractTests(unittest.IsolatedAsyncioTestCase):
                 return ""
             raise AssertionError(args)
         self.bridge.command = command
+        async def captions(*args):
+            return {"lyrics": []}
+        self.bridge.caption_command = captions
         self.sock = socket.socket()
         self.sock.bind(("127.0.0.1", 0))
         self.port = self.sock.getsockname()[1]
@@ -66,7 +69,7 @@ class ContractTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_ma_client_login_and_extensions(self):
         self.assertTrue(await self.conn.ping())
-        self.assertEqual(await self.conn.get_open_subsonic_extensions(), [])
+        self.assertEqual((await self.conn.get_open_subsonic_extensions())[0].name, "songLyrics")
         self.assertTrue((await self.conn.get_license())["license"]["valid"])
         async with httpx.AsyncClient(trust_env=False) as client:
             r = await client.get(f"http://127.0.0.1:{self.port}/rest/ping.view", params={"f": "json", "u": "youtube", "p": "wrong"})
@@ -172,6 +175,79 @@ class ContractTests(unittest.IsolatedAsyncioTestCase):
         first, second = await asyncio.gather(self.bridge.audio(ID), self.bridge.audio(ID))
         self.assertEqual(first, second)
         self.assertEqual(sum("-o" in c for c in self.calls), 1)
+
+    async def test_timed_lyrics_cache_and_legacy(self):
+        self.bridge.put(INFO)
+        calls = []
+        async def captions(item_id, automatic):
+            calls.append((item_id, automatic))
+            return {"lyrics": [{"lang": "fr", "synced": True, "line": [{"start": 1234, "value": "Fixture one"}, {"start": 3200, "value": "Fixture two"}]}]}
+        self.bridge.caption_command = captions
+        lyrics = await self.conn.get_lyrics_by_song_id(ID)
+        self.assertTrue(lyrics[0].synced)
+        self.assertEqual(lyrics[0].line[0].start, 1234)
+        self.assertEqual(lyrics[0].lang, "fr")
+        self.assertEqual((await self.conn.get_lyrics(artist="Tinalei", title=INFO["title"])).value, "Fixture one\nFixture two")
+        self.assertEqual(len(calls), 1)
+        replacement = Bridge({"password": "test-password"}, Path(self.temp.name))
+        async def fail(*args):
+            raise AssertionError("Persistent captions should not need another lookup")
+        replacement.caption_command = fail
+        self.assertEqual((await replacement.lyrics(ID))[0]["line"][0]["start"], 1234)
+        replacement.db.close()
+        async with httpx.AsyncClient(trust_env=False) as client:
+            response = await client.get(f"http://127.0.0.1:{self.port}/rest/getLyricsBySongId", params={"u": "youtube", "p": "test-password", "id": ID, "f": "xml"})
+            self.assertIn('<line start="1234">Fixture one</line>', response.text)
+            response = await client.get(f"http://127.0.0.1:{self.port}/rest/getOpenSubsonicExtensions", params={"u": "youtube", "p": "test-password", "f": "xml"})
+            self.assertIn('<versions>1</versions>', response.text)
+
+    async def test_lyrics_disabled_and_automatic_policy(self):
+        self.bridge.lyrics_enabled = False
+        async def fail(*args):
+            raise AssertionError("Disabled captions must never access YouTube")
+        self.bridge.caption_command = fail
+        self.assertEqual(await self.conn.get_lyrics_by_song_id(ID), [])
+        self.bridge.lyrics_enabled = True
+        async def auto(*args):
+            return {"automatic": True, "lyrics": [{"lang": "en", "synced": True, "line": [{"start": 0, "value": "Automatic fixture"}]}]}
+        self.bridge.caption_command = auto
+        self.assertEqual(await self.bridge.lyrics(ID), [])
+        self.bridge.allow_auto_lyrics = True
+        self.assertEqual(len(await self.conn.get_lyrics_by_song_id(ID)), 1)
+        self.bridge.allow_auto_lyrics = False
+        self.assertEqual(await self.conn.get_lyrics_by_song_id(ID), [])
+
+    async def test_failed_caption_lookup_keeps_audio_playable(self):
+        self.bridge.put(INFO)
+        async def fail(*args):
+            raise BridgeError("Fixture lookup failure")
+        self.bridge.caption_command = fail
+        self.assertEqual(await self.conn.get_lyrics_by_song_id(ID), [])
+        url, _ = self.conn.get_stream_url(ID, tformat="raw")
+        async with httpx.AsyncClient(trust_env=False) as client:
+            self.assertEqual((await client.get(url)).status_code, 200)
+
+    async def test_slow_caption_lookup_background_and_deduplicated(self):
+        self.bridge.put(INFO)
+        self.bridge.lyrics_wait_seconds = .01
+        started, finish = asyncio.Event(), asyncio.Event()
+        calls = []
+        async def slow(*args):
+            calls.append(args)
+            started.set()
+            await finish.wait()
+            return {"lyrics": [{"lang": "en", "synced": True, "line": [{"start": 0, "value": "Later fixture"}]}]}
+        self.bridge.caption_command = slow
+        first, second = await asyncio.gather(self.bridge.lyrics(ID), self.bridge.lyrics(ID))
+        self.assertEqual((first, second), ([], []))
+        self.assertEqual(len(calls), 1)
+        url, _ = self.conn.get_stream_url(ID, tformat="raw")
+        async with httpx.AsyncClient(trust_env=False) as client:
+            self.assertEqual((await client.get(url)).status_code, 200)
+        tasks = list(self.bridge.lyrics_tasks.values())
+        finish.set()
+        await asyncio.gather(*tasks)
+        self.assertEqual((await self.conn.get_lyrics_by_song_id(ID))[0].line[0].value, "Later fixture")
 
     async def test_unicode_password(self):
         self.bridge.password = "æøå-password"
