@@ -12,11 +12,13 @@ Party Guest serverer gæstesiden på Home Assistant. **Party AI DJ og Kiosk Sate
 
 ## QR i Kiosk Party
 
-Opdatér Party Mode til **0.1.14**. Angiv Party Guest's `api_token` til en tilfældig adgangskode på mindst 24 tegn. Ingress viser derefter **Forbind Kiosk Party** med den særskilte værtsforbindelse.
+Opdatér Party Mode til **0.1.14**. Angiv Party Guest's `api_token` til en tilfældig adgangskode på mindst 24 tegn. Åbn Party Guest → **Åbn webgrænseflade** (ingress). Under **Forbind Kiosk Party** vises med den særskilte værtsforbindelse.
 
 Gem forbindelsen i Party-menuen → Gæster → **Party Guest · opsæt adresse**:
 
-`http://192.168.0.18:8102/#token=DIT_PARTY_GUEST_API_TOKEN`
+`http://192.168.0.18:8103/#token=DIT_PARTY_GUEST_API_TOKEN`
+
+Eksemplet bruger din valgte port 8103. Kopiér hele adressen fra ingress; indsæt den på selve Kiosk-skærmen i ovenstående felt. Hvis Party Guest’s `api_token` allerede er gemt, skal det ikke ændres.
 
 Vælg **Guest QR destination → Party guest page**. Party Guest og Kiosk skal pege på samme MA-kø. QR'en indeholder et separat gæstetoken, aldrig værts- eller MA-tokenet. Den tidligere AI DJ-baserede gæsteforbindelse fortsætter som kompatibilitet, indtil denne nye forbindelse gemmes.
 
@@ -35,7 +37,9 @@ Alle på netværket, som kan åbne den mappede gæsteadresse, kan få en gæstes
 Installer Party AI DJ separat og konfigurér dens AI-model. I Party Guest angives:
 
 - `ai_dj_url`: fx `http://192.168.0.18:8101` (uden fragment/token).
-- `ai_dj_token`: AI DJ-add-on'ens API-token.
+- `ai_dj_token`: værdien af `api_token` i **Party AI DJ**, mindst 24 tegn. Dette er ikke Party Guest’s eget `api_token`.
+
+Gem og genstart Party Guest efter konfigurationsændringer. Værtsiden forklarer nu under **Tilgængelige søgemåder**, hvorfor AI eventuelt er skjult. `search_ai_entity` kan også slå AI fra; et tomt felt tillader den.
 
 Party Guest bruger kun AI DJ til at hente forslag og resultater. Tilføjelse til køen sker gennem Party Guest's egen, begrænsede gæsteadgang. Hvis AI DJ stoppes eller fjernes, fortsætter Søg og Similar; AI-fanen skjules ved næste konfigurationsopdatering. Ingen AI Task eller AI-nøgle kræves i Party Guest.
 

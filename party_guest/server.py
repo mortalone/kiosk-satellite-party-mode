@@ -31,6 +31,7 @@ class Portal:
                 pass
         self.guests = Guests(self)
         self.ai_cached = (0, False)
+        self.ai_reason = ""
         self.continuation = Continuation(self)
 
     def ha_get(self, path):
@@ -179,11 +180,23 @@ class Portal:
         if now - self.ai_cached[0] < 5:
             return self.ai_cached[1]
         available = False
-        if self.options.get('ai_dj_url') and len(self.options.get('ai_dj_token', '')) >= 24:
+        reason = ''
+        if not self.options.get('ai_dj_url'):
+            reason = 'Angiv ai_dj_url i Party Guest-konfigurationen: adressen til Party AI DJ uden #token.'
+        elif len(self.options.get('ai_dj_token', '')) < 24:
+            reason = 'Angiv ai_dj_token i Party Guest: kopiér api_token fra Party AI DJ (mindst 24 tegn).'
+        else:
             try:
                 available = self.ai_request('/api/search-config').get('ai') is True
-            except (requests.RequestException, ValueError, TypeError):
-                pass
+                if not available:
+                    reason = 'Party AI DJ svarer, men AI-søgning er slået fra. Kontrollér dens AI-opsætning og søgeindstillinger.'
+            except requests.HTTPError as error:
+                code = error.response.status_code if error.response is not None else 0
+                reason = ('Party AI DJ afviser tokenet. Kontrollér ai_dj_token mod dens api_token.' if code in (401, 403)
+                          else 'Party AI DJ svarer med en fejl. Kontrollér dens log og opdatér add-on’en.')
+            except (requests.RequestException, ValueError, TypeError, AttributeError):
+                reason = 'Party AI DJ kan ikke kontaktes. Kontrollér ai_dj_url, port, token og at add-on’en kører.'
+        self.ai_reason = reason
         self.ai_cached = (now, available)
         return available
 
@@ -219,7 +232,10 @@ class Portal:
         kiosk = urlsplit(url)
         master = self.options.get('api_token', '')
         kiosk_url = kiosk.scheme + '://' + kiosk.netloc + '/#token=' + master if url and len(master) >= 24 else ''
-        return {'guest_url': url, 'kiosk_url': kiosk_url, 'modes': self.search_config(), 'guest_access': self.guest_allowed(), 'party': self.party_settings()}
+        modes = self.search_config()
+        ai_status = ('AI-søgning er klar.' if modes['ai'] else
+                     'AI-søgning er slået fra via search_ai_entity.' if not self.enabled('search_ai_entity') else self.ai_reason)
+        return {'guest_url': url, 'kiosk_url': kiosk_url, 'modes': modes, 'ai_status': ai_status, 'guest_access': self.guest_allowed(), 'party': self.party_settings()}
 
 
 def handler(portal, ingress=False):

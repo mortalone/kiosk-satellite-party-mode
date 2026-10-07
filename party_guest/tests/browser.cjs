@@ -15,6 +15,16 @@ const assert=require('assert');
   await page.locator('.queue-row .row-similar').first().waitFor({state:'visible'});
   assert.equal(await page.locator('[data-mode=ai]:visible').count(),0);
   assert.equal(await page.locator('.queue-row').count(),2);
+  // A long queue must grow the page rather than create another scroll surface.
+  assert(await page.evaluate(()=>{
+   const q=document.getElementById('queue');
+   for(let i=0;i<12;i++)q.append(q.firstElementChild.cloneNode(true));
+   const style=getComputedStyle(q);
+   return style.maxHeight==='none' && style.overflowY==='visible' && q.clientHeight===q.scrollHeight;
+  }));
+  await page.locator('.queue-row').last().scrollIntoViewIfNeeded();
+  assert(await page.evaluate(()=>window.scrollY>0));
+  await page.reload();await page.locator('.queue-row .row-similar').first().waitFor();
   assert.equal(await page.locator('.queue-row.current').count(),1);
   assert((await page.locator('#help').textContent()).includes('bruger ikke AI'));
   assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).colorScheme),'light');
@@ -38,6 +48,8 @@ const assert=require('assert');
   await ingress.locator('#open').waitFor({state:'visible'});
   assert.equal(await ingress.locator('#open').getAttribute('href'),'http://127.0.0.1:18102/guest/');
   assert(!(await ingress.locator('#url').textContent()).includes('secret'));
+  assert(await ingress.locator('#kiosk').isVisible());
+  assert((await ingress.locator('#ai-status').textContent()).includes('ai_dj_url'));
   assert((await ingress.locator('#kiosk').textContent()).includes('browser-fixture-host-secret'));
   await ingress.locator('#placement').selectOption('next');
   await ingress.locator('#method').selectOption('favorites');

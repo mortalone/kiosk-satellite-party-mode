@@ -22,7 +22,9 @@ class FixturePortal(Portal):
             assert set(args['media']).issubset({t['uri'] for t in self.tracks})
             self.added.extend(args['media']); return None
         raise AssertionError(command)
-    def ai_available(self): return self.party_policy['auto_method'] == 'ai'
+    def ai_available(self):
+        self.ai_reason = 'Angiv ai_dj_url i Party Guest-konfigurationen.'
+        return self.party_policy['auto_method'] == 'ai'
     def suggest(self, data): return {'id': 'fixture-ai-job'}
     def job(self, key): return {'state': 'ready', 'tracks': self.tracks}
     def ai_request(self, path, data=None):

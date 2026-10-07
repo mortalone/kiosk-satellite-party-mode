@@ -27,6 +27,29 @@ class PortalTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.portal.guests.search(self.token, {'mode': 'ai', 'query': 'Jazz'})
 
+    def test_ai_status_explains_configuration_and_failure_without_secrets(self):
+        self.assertIn('ai_dj_url', self.portal.status()['ai_status'])
+        self.portal.options['ai_dj_url'] = 'http://dj:8101'
+        self.portal.ai_cached = (0, False)
+        self.assertIn('ai_dj_token', self.portal.status()['ai_status'])
+        self.portal.options['ai_dj_token'] = 'secret-never-display-' * 2
+        self.portal.ai_cached = (0, False)
+        response = requests.Response(); response.status_code = 401
+        self.portal.ai_request = Mock(side_effect=requests.HTTPError(response=response))
+        status = self.portal.status()
+        self.assertIn('afviser tokenet', status['ai_status'])
+        self.assertNotIn(self.portal.options['ai_dj_token'], str(status))
+        self.portal.ai_cached = (0, False)
+        self.portal.ai_request = Mock(return_value={'ai': False})
+        self.assertIn('slået fra', self.portal.status()['ai_status'])
+        self.portal.ai_cached = (0, False)
+        self.portal.ai_request = Mock(return_value={'ai': True})
+        self.assertTrue(self.portal.status()['modes']['ai'])
+        self.assertEqual(self.portal.status()['ai_status'], 'AI-søgning er klar.')
+        self.portal.options['search_ai_entity'] = 'switch.ai'
+        self.portal.ha_get = Mock(return_value={'state': 'off'})
+        self.assertIn('search_ai_entity', self.portal.status()['ai_status'])
+
     def test_direct_join_preserves_host_disabled_modes_and_queue_changes(self):
         self.portal.guests.link({'queue_id': 'group', 'modes': {'library': False, 'similar': True}})
         self.assertEqual(self.portal.join()['path'].split('=')[1], self.token)

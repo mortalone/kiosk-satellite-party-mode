@@ -1,5 +1,5 @@
 name: Party Guest
-version: "0.2.1"
+version: "0.2.2"
 slug: party_guest
 description: Independent Music Assistant guest search and queue; AI DJ is optional
 url: https://github.com/mortalone/kiosk-satellite-party-mode/tree/main/party_guest

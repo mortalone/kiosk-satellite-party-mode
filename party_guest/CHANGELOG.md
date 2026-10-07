@@ -1,3 +1,9 @@
+## 0.2.2
+
+- Let the queue scroll with the page, without a nested scroll area on phones or desktops.
+- Explain missing AI search in the host page: missing URL/token, rejected credentials, unreachable service, or disabled AI.
+- Show the Kiosk connection directly instead of hiding it in a collapsed section; distinguish Party Guest and AI DJ tokens.
+
 ## 0.2.1
 
 - Fix guest startup with MA tracks whose metadata images/artist lists are null; missing artwork no longer hides search and queue.
