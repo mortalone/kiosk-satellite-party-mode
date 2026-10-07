@@ -50,7 +50,7 @@ for add-on'ens `8101/tcp`. Udfyld `api_token` med en tilfældig adgangskode på 
 24 tegn. Den giver kun adgang til DJ-forespørgsler, resultater og køvalg for den
 konfigurerede gruppe. Lad porten være umappet, hvis ingress er tilstrækkelig.
 
-Opdatér **Party Mode til 0.1.11**. I Party-menuen → **AI DJ · opsæt adresse** indsættes:
+Opdatér **Party Mode til 0.1.12**. I Party-menuen → **AI DJ · opsæt adresse** indsættes:
 
 `http://192.168.0.18:8101/#token=DIT_API_TOKEN`
 
@@ -58,7 +58,7 @@ Tryk **Gem og åbn AI DJ**. Forstørrelsesglasset samler nu **Søg**, **Similar*
 
 HA-switches **Search: Library**, **Search: Similarity**, **Search: AI DJ** og **Similar to current track** gemmer, hvilke muligheder der vises. Den eksisterende `Allow music search` er fortsat hovedtilladelsen.
 
-Gæste-QR'en fører nu altid til **MA's eksisterende Party-gæsteside** og følger MA Guest access. Den tidligere alternative AI DJ-QR er fjernet. AI-fanen findes endnu ikke i en almindelig MA-gæsteside; den kræver den tilpassede MA-integration under [ma_ai_dj](../ma_ai_dj/README.md).
+Vælg **Guest QR destination** i HA: **Music Assistant** åbner MA's officielle gæsteside; **Party guest page** åbner vores side med Søg, Similar og AI DJ. Den sidste kræver Party AI DJ **0.1.4**, samme kø-id og ovenstående adresse gemt i Party. QR'en indeholder et særskilt gæstetoken, ikke dit host-token. Gæster kan kun tilføje fundne numre sidst i køen. Siden bruger egne søgebegrænsninger, ikke MA's request/boost-regler. Similar kræver Sonic Similarity i MA; AI DJ kræver valgt AI-forbindelse.
 
 Tidligere direkte add-on-links med `#token=...` virker stadig. De er separate fra MA's Guest-switch; skift add-on-tokenet for at tilbagekalde dem.
 

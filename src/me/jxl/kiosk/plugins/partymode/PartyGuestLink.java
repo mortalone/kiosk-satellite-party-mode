@@ -6,6 +6,18 @@ import java.net.URI;
 final class PartyGuestLink {
     private PartyGuestLink() {}
 
+    static String custom(String path, String configuredDj) {
+        if (path == null || !path.matches("/guest/#token=[A-Za-z0-9_-]{40,64}")) return "";
+        try {
+            URI base = new URI(configuredDj);
+            if (!("http".equalsIgnoreCase(base.getScheme()) || "https".equalsIgnoreCase(base.getScheme())) ||
+                    base.getHost() == null || base.getUserInfo() != null) return "";
+            // Build from the origin only. Never copy the host's API token or query into a QR.
+            return new URI(base.getScheme(), null, base.getHost(), base.getPort(), "/guest/", null,
+                    path.substring(path.indexOf('#') + 1)).toASCIIString();
+        } catch (Exception ignored) { return ""; }
+    }
+
     static boolean matches(String selectedQueue, Object partyPlayer) {
         return selectedQueue != null && !selectedQueue.trim().isEmpty() &&
                 partyPlayer instanceof String && selectedQueue.equals(((String) partyPlayer).trim());

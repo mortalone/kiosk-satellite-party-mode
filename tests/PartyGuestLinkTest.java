@@ -14,6 +14,11 @@ public final class PartyGuestLinkTest {
         for (String bad : new String[] {"javascript:bad", "http://ma.local/", "http://ma.local/?join=", "http://user:pass@ma.local/?join=test", "http://ma.local/?join=test&auth_token=secret", "http://ma.local/?join=test#token"}) {
             check(PartyGuestLink.validated(bad, "http://ma.local:8095").isEmpty(), "reject unsafe URL");
         }
+        String capability = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG";
+        check(PartyGuestLink.custom("/guest/#token=" + capability, "http://192.168.0.18:8101/#token=host-secret").equals("http://192.168.0.18:8101/guest/#token=" + capability), "custom QR uses guest capability only");
+        for (String bad : new String[]{"https://other/guest/#token=" + capability, "/guest/#token=short", "/guest/#token=" + capability + "&admin=true"})
+            check(PartyGuestLink.custom(bad, "http://dj:8101/#token=secret").isEmpty(), "reject unexpected custom link");
+        check(PartyGuestLink.custom("/guest/#token=" + capability, "http://user:password@dj:8101").isEmpty(), "reject credentials in guest origin");
         System.out.println("Party guest link checks passed");
     }
     private static void check(boolean ok, String message) { if (!ok) throw new AssertionError(message); }

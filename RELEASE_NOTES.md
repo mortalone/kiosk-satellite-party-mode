@@ -1,3 +1,11 @@
+## Party Mode 0.1.12 and Party AI DJ 0.1.4
+
+- Restore QR destination choice: official Music Assistant guest portal or independent Party guest page. The companion page offers Library, Sonic Similarity, AI DJ and similar-to-current-track, without changing official MA.
+- Add six persisted HA switches to show/hide screen settings categories: visualization, music/AI connection, screen controls, guests/QR, sound/EQ and graphics/status. Hide every category to remove the menu button. Search permissions are HA-only.
+- Create queue-scoped, expiring guest tokens; never put the companion host API token into a QR. Guests can append verified search results only. The custom page uses its own search throttles, not MA Party request/boost limits.
+- Request Kiosk foreground even if a background Activity exists, retry briefly and preserve Party during the screensaver transition. Physical Fotoo validation remains necessary.
+- Add guest API isolation, mode/queue/expiry checks, QR token checks and native category/custom-QR smoke scenarios.
+
 ## Correction: retain official Music Assistant
 
 - Withdraws the replacement MA add-on and its data migration instructions.

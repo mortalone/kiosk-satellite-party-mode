@@ -39,6 +39,13 @@ public final class PartyQaActivity extends Activity {
                     plugin.onEvent("switch.search_ai", Collections.singletonMap("on", false));
                     main.postDelayed(() -> { try { call("showSearch"); } catch (Exception e) { throw new RuntimeException(e); } }, 300);
                 } else if ("settings".equals(mode)) call("showPartyMenu", View.class, new View(PartyQaActivity.this));
+                else if ("menucategories".equals(mode)) {
+                    plugin.onEvent("switch.menu_visuals", Collections.singletonMap("on", false));
+                    plugin.onEvent("switch.menu_guests", Collections.singletonMap("on", false));
+                    main.postDelayed(() -> { try { call("showPartyMenu", View.class, new View(PartyQaActivity.this)); } catch(Exception e) { throw new RuntimeException(e); } }, 300);
+                } else if ("guestpage".equals(mode)) {
+                    plugin.onEvent("select.guest_page", Collections.singletonMap("option", "Party guest page"));
+                }
                 else if ("playlists".equals(mode)) call("showPlaylists");
                 else if ("dj".equals(mode)) call("configureDj");
                 else if ("lyrics".equals(mode) || "discolyrics".equals(mode)) call("setPartyEffect", String.class, mode);
@@ -56,6 +63,12 @@ public final class PartyQaActivity extends Activity {
                         Dialog panel = (Dialog)field("searchDialog");
                         if (panel == null || hasText(panel.getWindow().getDecorView(), "AI DJ") || !Boolean.FALSE.equals(switches.get("search_ai"))) throw new AssertionError("AI switch did not hide the pill");
                     }
+                    if ("menucategories".equals(mode)) {
+                        View menu = ((Dialog)field("searchDialog")).getWindow().getDecorView();
+                        if (hasText(menu, "VISUALISERING") || hasText(menu, "GÆSTER") || !hasText(menu, "SKÆRM")) throw new AssertionError("hidden categories remained visible");
+                        if (!Boolean.FALSE.equals(switches.get("menu_visuals")) || !Boolean.FALSE.equals(switches.get("menu_guests"))) throw new AssertionError("category switches missing");
+                    }
+                    if ("guestpage".equals(mode) && (!String.valueOf(field("partyGuestUrl")).startsWith("http://127.0.0.1:18095/guest/#token=") || String.valueOf(field("partyGuestUrl")).contains("fixture-token") || field("partyQr") == null)) throw new AssertionError("custom guest QR absent or contains host token");
                     if ("switch".equals(mode) && !publishedPartyState) throw new AssertionError("HA switch did not report Party active");
                     if (view == null) throw new AssertionError("Party root missing");
                     if ("main".equals(mode) && (!switches.containsKey("search_ai") || !switches.containsKey("search_similar") || !switches.containsKey("search_library") || !switches.containsKey("current_similar"))) throw new AssertionError("search switches absent");
@@ -146,7 +159,13 @@ public final class PartyQaActivity extends Activity {
             if(header.toLowerCase().startsWith("authorization:"))auth=header.substring(14).trim();
         }
         byte[] data;String content;
-        if(first.contains("/api/suggest") || first.contains("/api/jobs/")) {
+        if(first.contains("/api/guest-link")) {
+            if (!"Bearer public-emulator-dj-fixture-token".equals(auth)) throw new AssertionError("guest link needs host auth");
+            char[] body=new char[length]; int read=0,n; while(read<length&&(n=in.read(body,read,length-read))>0)read+=n;
+            JSONObject request=new JSONObject(new String(body,0,read));
+            if (!"qa-group".equals(request.optString("queue_id"))) throw new AssertionError("wrong guest queue");
+            data=new JSONObject().put("path", "/guest/#token=abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG").toString().getBytes("UTF-8"); content="application/json";
+        } else if(first.contains("/api/suggest") || first.contains("/api/jobs/")) {
             if (!"Bearer public-emulator-dj-fixture-token".equals(auth)) throw new AssertionError("DJ API token not sent");
             JSONObject result = new JSONObject().put("id", "fixture-job");
             if (first.contains("/api/jobs/")) result.put("state", "ready").put("tracks", new JSONArray().put(media(4)).put(media(5)));

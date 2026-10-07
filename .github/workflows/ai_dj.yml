@@ -16,6 +16,18 @@ jobs:
           python-version: "3.12"
       - run: pip install -r ai_dj/requirements.txt
       - run: python -m unittest discover -s ai_dj/tests -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check guest page in a mobile browser
+        run: |
+          npm install --prefix /tmp/party-web playwright@1.55.1
+          /tmp/party-web/node_modules/.bin/playwright install --with-deps chromium
+          NODE_PATH=/tmp/party-web/node_modules node ai_dj/tests/guest_ui.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: party-guest-preview
+          path: dist/qa/guest-page-preview.png
       - name: Build container
         run: |
           VERSION=$(python -c 'import re; print(re.search(r"version: \"([^\"]+)\"", open("ai_dj/config.yaml").read()).group(1))')

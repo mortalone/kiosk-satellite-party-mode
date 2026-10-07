@@ -22,9 +22,23 @@ Stop prevents automatic reopening until visibility/playback eligibility closes a
 
 Party gets the current track and upcoming tracks directly from the selected MA queue, with cover art and progress. It needs no Next track entity or Show next track setting. The two track counts configure the queue window. The existing layout actions switch between that list and a smaller current-song card.
 
-Select the same explicit group in Music Assistant's **Party Player** and enable **Guest Access**. Party uses the actual join URL supplied by MA and generates its QR locally. The QR is hidden if the Party queue differs from the selected group or guest access cannot be confirmed. Requests use MA's guest interface and queue rules.
+For **Guest QR destination → Music Assistant** (the default), select the same explicit group in Music Assistant's **Party Player** and enable **Guest Access**. Party uses the actual join URL supplied by MA and generates its QR locally. The QR is hidden if the Party queue differs from the selected group or guest access cannot be confirmed. Requests use MA's guest interface and queue rules.
 
 Guest-enable/disable actions write only `enable_guest_access` on the single enabled Party provider whose explicit player matches this queue. The configured token needs provider-settings access. Ambiguous, Auto and unmatched providers are left untouched. Hiding the QR does not disable MA guest access.
+
+### Independent Party guest page (0.1.12)
+
+Update **Party AI DJ to 0.1.4** and **Party Mode to 0.1.12**. Configure the companion's `queue_id` with the same MA queue (or the same HA media_player), and its AI provider. In the Party menu, use **AI DJ · opsæt adresse** to save `http://YOUR_HA_IP:8101/#token=YOUR_HOST_API_TOKEN`. Phones must be able to reach this address.
+
+Choose **Guest QR destination → Party guest page** in HA, or **QR · vores Party-gæsteside** in the on-screen Guests category. Scan the new QR to open Søg, Similar and AI DJ. Similar requires MA Sonic Similarity, an analyzed library and free-text search enabled; AI DJ needs a configured AI provider. Search-mode HA switches determine which choices guests see.
+
+The QR carries a separate guest token scoped to this queue, valid for six hours. Restarting the companion invalidates it. Guests can only append resolved search results; they cannot replace the queue or access host AI settings. This page has its own search throttles and does **not** use MA Party request, boost or guest-limit rules. The Music Assistant destination continues to use those rules.
+
+### Visible Party settings
+
+Six **Party menu:** HA switches show/hide Visualization, Music/AI connection, Screen, Guests/QR, Sound/EQ and Graphics/status. They persist across restart. Hiding all categories removes the settings button; search, playback and Close permissions remain independent. Search enable switches are only available in HA.
+
+Party asks Android to bring Kiosk to the foreground during startup, including when an external screensaver such as Fotoo is above it. Android/device restrictions can affect this; validate on the actual kiosk.
 
 ## Actions
 
@@ -33,7 +47,7 @@ Guest-enable/disable actions write only `enable_guest_access` on the single enab
 - Screen controls: Settings and Close / Close only / Hidden.
 - Layout: full queue / current song only.
 - Show/hide volume and show/hide playback controls: two independent saved toggle actions. The screen menu also has separate checkboxes. These visibility actions do not change playback or volume.
-- Guest QR: follow Music Assistant / hide.
+- Guest QR: Music Assistant / Party guest page; independently show or hide the QR.
 - Guests: enable / disable Music Assistant guest access.
 
 Presentation choices made in actions or the screen menu persist across restart. Changing the corresponding plugin setting replaces the saved action choice. Gain adjusts visual strength, never audio volume. Animated input is labeled as demo. Audio-dependent output still depends on what Android's selected capture method supplies.

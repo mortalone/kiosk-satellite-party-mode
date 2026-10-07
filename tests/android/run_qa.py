@@ -8,7 +8,7 @@ adb('install','-r','/tmp/party-android-qa/qa.apk')
 adb('shell','am','start','-n','me.jxl.kiosk.partyqa/me.jxl.kiosk.plugins.partymode.PartyQaActivity')
 time.sleep(7)
 out=Path('dist/qa');out.mkdir(parents=True,exist_ok=True)
-for mode in ['main','search','placement','playlists','settings','lyrics','discolyrics','ai','similar','dj','switch','searchswitches']:
+for mode in ['main','search','placement','playlists','settings','lyrics','discolyrics','ai','similar','dj','switch','searchswitches','menucategories','guestpage']:
  adb('shell','am','broadcast','-a','party.qa.MODE','--es','mode',mode)
  time.sleep(3)
  logs=adb('logcat','-d','-s','PARTY_QA:I','AndroidRuntime:E')

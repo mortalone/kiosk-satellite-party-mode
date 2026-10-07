@@ -13,6 +13,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 import requests
 from radio import Radio, OPTIONS
+from guests import Guests
 
 
 def normalized(value):
@@ -81,6 +82,7 @@ class DJ:
         self.worker = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         self.busy = False
         self.radio=Radio(self)
+        self.guests=Guests(self)
     def request(self, url, token, data, timeout):
         response = requests.post(url, headers={'Authorization':'Bearer '+token}, json=data, timeout=(3,timeout))
         if response.status_code == 401: raise ValueError('Adgang afvist: kontrollér token/AI Task')
@@ -247,12 +249,20 @@ def handler(dj, ingress=False):
                 token=dj.options.get('api_token','')
                 supplied=self.headers.get('Authorization','').removeprefix('Bearer ')
                 allowed=len(token)>=24 and hmac.compare_digest(token,supplied)
+            guest_token = self.headers.get('Authorization','').removeprefix('Bearer ')
+            guest = not ingress and not allowed and guest_token in dj.guests.sessions
             # Static guest page is safe without auth; every API request requires the capability.
             if not post and path in {'/','/index.html'} and (not ingress or allowed):
                 body=Path(__file__).with_name('index.html').read_bytes()
                 self.send_response(200);self.send_header('Content-Type','text/html; charset=utf-8');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body);return
-            if not allowed: return self.reply(401,{'error':'Adgang afvist'})
+            if not post and path in {'/guest', '/guest/', '/guest/index.html'} and (not ingress or allowed):
+                body=Path(__file__).with_name('guest.html').read_bytes()
+                self.send_response(200);self.send_header('Content-Type','text/html; charset=utf-8');self.send_header('Content-Length',str(len(body)));self.send_header('Referrer-Policy','no-referrer');self.end_headers();self.wfile.write(body);return
+            if not allowed and not guest: return self.reply(401,{'error':'Adgang afvist. Scan Party-QR-koden igen'})
             try:
+                if guest and not path.startswith('/api/guest/'): return self.reply(403,{'error':'Kun gæstefunktioner er tilgængelige'})
+                if not post and path=='/api/guest/config': return self.reply(200,dj.guests.config(guest_token))
+                if not post and path.startswith('/api/guest/jobs/'): return self.reply(200,dj.guests.job(guest_token,path.rsplit('/',1)[1]))
                 if path.startswith('/api/admin/') and not ingress: return self.reply(403,{'error':'AI-opsætning åbnes fra HA ingress'})
                 if not post and path=='/api/admin/radio': return self.reply(200,dj.radio.status())
                 if not post and path=='/api/admin/ai': return self.reply(200,dj.ai_choices())
@@ -265,6 +275,9 @@ def handler(dj, ingress=False):
                 if not isinstance(data,dict): raise ValueError('Forventede et JSON-objekt')
                 if path=='/api/admin/radio': return self.reply(200,dj.radio.control(data))
                 if path=='/api/admin/ai': return self.reply(200,dj.select_ai(data))
+                if path=='/api/guest-link' and allowed: return self.reply(200,dj.guests.link(data))
+                if path=='/api/guest/search': return self.reply(202,dj.guests.search(guest_token,data))
+                if path=='/api/guest/queue': return self.reply(200,dj.guests.enqueue(guest_token,data))
                 if path=='/api/suggest': return self.reply(202,dj.suggest(data))
                 if path=='/api/queue': return self.reply(200,dj.enqueue(data))
                 self.reply(404,{'error':'Ukendt endpoint'})
