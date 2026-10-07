@@ -5,3 +5,15 @@ configuration:
   allow_auto_lyrics:
     name: Tillad automatiske undertekster
     description: Brug YouTubes automatiske undertekster, hvis uploaderens tekst mangler. Kan indeholde fejl og tale mellem sangene.
+  prefetch_enabled:
+    name: Hent kommende numre på forhånd
+    description: Læs Music Assistants køer og klargør kommende YouTube-numre. Kræver serveradresse og MA-token.
+  prefetch_tracks:
+    name: Antal kommende YouTube-numre
+    description: Antal per aktiv kø. Standard 2, højst 6 samlet på tværs af køer.
+  music_assistant_url:
+    name: Music Assistant-serveradresse
+    description: MA-serverens direkte adresse, fx http://192.168.0.18:8095. Brug ikke Home Assistants ingress-adresse.
+  music_assistant_token:
+    name: Music Assistant-token
+    description: Et MA-token med adgang til at læse køer. Brug ikke et Home Assistant-token.
