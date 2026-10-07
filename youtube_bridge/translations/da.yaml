@@ -1,0 +1,7 @@
+configuration:
+  lyrics_enabled:
+    name: Hent sangtekster
+    description: Hent videoens undertekster som sangtekst til Music Assistant. Manglende tekst stopper aldrig musikken.
+  allow_auto_lyrics:
+    name: Tillad automatiske undertekster
+    description: Brug YouTubes automatiske undertekster, hvis uploaderens tekst mangler. Kan indeholde fejl og tale mellem sangene.
