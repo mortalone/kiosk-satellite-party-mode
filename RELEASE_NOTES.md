@@ -1,3 +1,11 @@
+## Party Mode 0.1.13 — independent Party Guest 0.1.0
+
+- Separate the Party guest portal from AI DJ. Søg, Similar, current-track recommendations and append-to-queue work without AI DJ installed or Kiosk running.
+- Add Party Guest HA add-on with own MA queue/connection, direct browser URL on port 8102 and an ingress link. Optional AI DJ connection only supplies AI results; unavailable AI hides its tab.
+- Add a separate Party Guest connection in Kiosk's Guests menu. Existing AI DJ guest links remain a compatibility fallback until configured.
+- Direct guest URLs can join the configured queue while access is enabled; own HA permission switches revoke access. Host and MA credentials remain inaccessible to guest capabilities.
+- Native emulator scenario verifies custom guest QR with the AI DJ URL cleared. Standalone browser tests verify direct access and ingress with no AI engine.
+
 ## Party Mode 0.1.12 and Party AI DJ 0.1.4
 
 - Restore QR destination choice: official Music Assistant guest portal or independent Party guest page. The companion page offers Library, Sonic Similarity, AI DJ and similar-to-current-track, without changing official MA.

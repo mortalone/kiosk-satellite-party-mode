@@ -44,6 +44,8 @@ public final class PartyQaActivity extends Activity {
                     plugin.onEvent("switch.menu_guests", Collections.singletonMap("on", false));
                     main.postDelayed(() -> { try { call("showPartyMenu", View.class, new View(PartyQaActivity.this)); } catch(Exception e) { throw new RuntimeException(e); } }, 300);
                 } else if ("guestpage".equals(mode)) {
+                    getSharedPreferences("party_mode_presentation", MODE_PRIVATE).edit()
+                            .putString("guest_url", "http://127.0.0.1:18095/#token=public-emulator-dj-fixture-token").putString("dj_url", "").commit();
                     plugin.onEvent("select.guest_page", Collections.singletonMap("option", "Party guest page"));
                 }
                 else if ("playlists".equals(mode)) call("showPlaylists");

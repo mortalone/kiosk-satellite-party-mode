@@ -1,3 +1,7 @@
+## 0.1.5
+- Retain the embedded guest endpoints for existing connections while the independent Party Guest add-on hosts new guest pages.
+- Share the guest frontend/capability contract with the independent portal. Party Guest can use AI DJ 0.1.3+ as an optional remote engine; Søg and Similar do not require it.
+
 ## 0.1.4
 - Add a separate `/guest/` page with Library, Similar, AI DJ and similar-to-current-track.
 - Add authenticated guest-link creation for Kiosk Party 0.1.12; QR contains a dedicated six-hour queue capability, never the host API token.

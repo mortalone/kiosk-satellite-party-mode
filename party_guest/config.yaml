@@ -1,0 +1,45 @@
+name: Party Guest
+version: "0.1.0"
+slug: party_guest
+description: Independent Music Assistant guest search and queue; AI DJ is optional
+url: https://github.com/mortalone/kiosk-satellite-party-mode/tree/main/party_guest
+arch: [amd64, aarch64]
+startup: application
+boot: auto
+init: false
+homeassistant_api: true
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:account-music
+ports:
+  8102/tcp: 8102
+ports_description:
+  8102/tcp: Party guest page for browsers, phones and Kiosk QR
+options:
+  music_assistant_url: "http://192.168.0.18:8095"
+  music_assistant_token: ""
+  queue_id: ""
+  public_url: "http://192.168.0.18:8102"
+  api_token: ""
+  guest_access: true
+  guest_access_entity: ""
+  search_library_entity: ""
+  search_similar_entity: ""
+  search_current_similar_entity: ""
+  search_ai_entity: ""
+  ai_dj_url: ""
+  ai_dj_token: ""
+schema:
+  music_assistant_url: str
+  music_assistant_token: password
+  queue_id: str
+  public_url: str
+  api_token: password?
+  guest_access: bool
+  guest_access_entity: str?
+  search_library_entity: str?
+  search_similar_entity: str?
+  search_current_similar_entity: str?
+  search_ai_entity: str?
+  ai_dj_url: str?
+  ai_dj_token: password?

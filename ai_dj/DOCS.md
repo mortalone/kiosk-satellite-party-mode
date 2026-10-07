@@ -58,7 +58,7 @@ Tryk **Gem og åbn AI DJ**. Forstørrelsesglasset samler nu **Søg**, **Similar*
 
 HA-switches **Search: Library**, **Search: Similarity**, **Search: AI DJ** og **Similar to current track** gemmer, hvilke muligheder der vises. Den eksisterende `Allow music search` er fortsat hovedtilladelsen.
 
-Vælg **Guest QR destination** i HA: **Music Assistant** åbner MA's officielle gæsteside; **Party guest page** åbner vores side med Søg, Similar og AI DJ. Den sidste kræver Party AI DJ **0.1.4**, samme kø-id og ovenstående adresse gemt i Party. QR'en indeholder et særskilt gæstetoken, ikke dit host-token. Gæster kan kun tilføje fundne numre sidst i køen. Siden bruger egne søgebegrænsninger, ikke MA's request/boost-regler. Similar kræver Sonic Similarity i MA; AI DJ kræver valgt AI-forbindelse.
+Vælg **Guest QR destination** i HA: **Music Assistant** åbner MA's officielle gæsteside; **Party guest page** kan nu bruge den selvstændige **[Party Guest](../party_guest/DOCS.md)** add-on med Søg og Similar uden AI DJ. Party Guest har egen ingress med browserlink og egen Kiosk-forbindelse på port 8102. AI DJ tilsluttes valgfrit til Party Guest med `ai_dj_url` og `ai_dj_token`. Den tidligere indbyggede gæsteside på port 8101 fungerer fortsat som kompatibilitet.
 
 Tidligere direkte add-on-links med `#token=...` virker stadig. De er separate fra MA's Guest-switch; skift add-on-tokenet for at tilbagekalde dem.
 

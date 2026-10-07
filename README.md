@@ -26,13 +26,15 @@ For **Guest QR destination → Music Assistant** (the default), select the same 
 
 Guest-enable/disable actions write only `enable_guest_access` on the single enabled Party provider whose explicit player matches this queue. The configured token needs provider-settings access. Ambiguous, Auto and unmatched providers are left untouched. Hiding the QR does not disable MA guest access.
 
-### Independent Party guest page (0.1.12)
+### Independent Party guest page (0.1.13)
 
-Update **Party AI DJ to 0.1.4** and **Party Mode to 0.1.12**. Configure the companion's `queue_id` with the same MA queue (or the same HA media_player), and its AI provider. In the Party menu, use **AI DJ · opsæt adresse** to save `http://YOUR_HA_IP:8101/#token=YOUR_HOST_API_TOKEN`. Phones must be able to reach this address.
+Install **[Party Guest 0.1.0](party_guest/DOCS.md)** from this HA add-on repository. It has its own Music Assistant connection, queue and ingress. **Party AI DJ is optional.** Browsers can open `http://YOUR_HA_IP:8102/guest/` directly; ingress includes an Open guest page link. Søg and Similar work without AI DJ or Kiosk running.
 
-Choose **Guest QR destination → Party guest page** in HA, or **QR · vores Party-gæsteside** in the on-screen Guests category. Scan the new QR to open Søg, Similar and AI DJ. Similar requires MA Sonic Similarity, an analyzed library and free-text search enabled; AI DJ needs a configured AI provider. Search-mode HA switches determine which choices guests see.
+For Kiosk QR, update Party Mode to **0.1.13**, set Party Guest's `api_token` (at least 24 characters), and copy its **Forbind Kiosk Party** address from ingress into **Gæster → Party Guest · opsæt adresse**. Select **Guest QR destination → Party guest page**. Both connections must refer to the same MA queue. The existing AI DJ guest URL remains a compatibility fallback until the independent guest connection is saved.
 
-The QR carries a separate guest token scoped to this queue, valid for six hours. Restarting the companion invalidates it. Guests can only append resolved search results; they cannot replace the queue or access host AI settings. This page has its own search throttles and does **not** use MA Party request, boost or guest-limit rules. The Music Assistant destination continues to use those rules.
+Party Guest's optional `ai_dj_url` and `ai_dj_token` connect a separate AI DJ engine; without it, the AI tab is hidden. Similar free-text search requires Sonic Similarity, an analyzed library and free-text search enabled in MA.
+
+The direct guest URL intentionally allows people who can reach the guest port to join while guest access is enabled. The QR carries a separate six-hour queue capability, never a host token. Guests can only append resolved results. Party Guest has its own HA access/search permissions and search throttles; it does **not** use MA Party request, boost or guest-limit rules. The Music Assistant QR destination continues to use those rules.
 
 ### Visible Party settings
 

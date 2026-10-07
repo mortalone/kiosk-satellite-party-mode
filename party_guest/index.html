@@ -1,0 +1,13 @@
+<!doctype html><html lang="da"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Party Guest</title>
+<style>[hidden]{display:none!important}:root{color-scheme:dark;font-family:system-ui;background:#10151e;color:#f0f3fa}body{max-width:760px;margin:auto;padding:28px}h1{letter-spacing:-1px}p{line-height:1.6;color:#a8b6c8}a{color:#83dfc7}.button{display:inline-block;padding:16px 24px;border-radius:14px;background:#226252;color:white;text-decoration:none}code{overflow-wrap:anywhere}li{margin:9px 0}</style>
+<h1>Party Guest</h1><p>Gæster kan finde musik og tilføje den til Music Assistant-køen. Søg og Similar fungerer uden AI DJ.</p>
+<p id="status" role="status">Henter gæstelink…</p><a id="open" class="button" target="_blank" rel="noopener noreferrer" hidden>Åbn gæstesiden i browseren ↗</a><p><code id="url"></code></p>
+<details><summary>Forbind Kiosk Party</summary><p>Indsæt denne adresse i Party-menuen → Gæster → Party Guest · opsæt adresse. Kun værten skal bruge den; gæster bruger linket ovenfor.</p><p><code id="kiosk"></code></p></details>
+<h2>Tilgængelige søgemåder</h2><ul id="modes"></ul>
+<p>Adressen kan åbnes direkte eller bruges i en QR-kode. Similar kræver Sonic Similarity ved fritekstsøgning. AI DJ vises kun, når en valgfri AI DJ-forbindelse er tilgængelig.</p>
+<p>Opsætning ændres under add-on'ens Konfiguration: Music Assistant-adresse/token, MA-kø eller HA media_player og offentlig browseradresse. AI DJ-adresse og token er valgfrie. Gæsteadgang og søgemåder kan styres med HA-switches.</p>
+<script>
+const $=id=>document.getElementById(id);
+async function refresh(){try{const r=await fetch('api/admin/status');const v=await r.json();if(!r.ok)throw Error(v.error);$('open').hidden=!v.guest_url||!v.guest_access;if(v.guest_url)$('open').href=v.guest_url;$('url').textContent=v.guest_url;$('kiosk').textContent=v.kiosk_url||'Angiv api_token på mindst 24 tegn i Konfiguration for at forbinde Kiosk.';$('status').textContent=!v.guest_access?'Gæsteadgang er slået fra.':v.guest_url?'Gæstesiden har sin egen adresse. AI DJ er valgfri.':'Angiv public_url i Konfiguration.';$('modes').replaceChildren();for(const [key,name]of Object.entries({library:'Søg · titel og kunstner',similar:'Similar · lignende musik',current_similar:'Lignende det aktuelle nummer',ai:'AI DJ · musikønsker'})){const li=document.createElement('li');li.textContent=name+' · '+(v.modes[key]?'tilgængelig':'slået fra / ikke tilsluttet');$('modes').append(li);}}catch(e){$('status').textContent=e.message;}}
+refresh();setInterval(refresh,15000);
+</script></html>

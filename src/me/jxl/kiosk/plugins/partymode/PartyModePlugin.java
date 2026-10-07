@@ -679,6 +679,27 @@ public final class PartyModePlugin implements KioskPlugin {
         });
         openSheet(a, "AI DJ · forbindelse", body, false);
     }
+    private String guestConnection() {
+        SharedPreferences prefs = context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE);
+        String saved = prefs.getString("guest_url", "");
+        // Keep 0.1.12 installations working until the independent portal is configured.
+        return saved.isEmpty() ? prefs.getString("dj_url", "") : saved;
+    }
+    private void configureGuest() {
+        Activity a = activeKioskActivity(); if (a == null) return;
+        LinearLayout body = panelBody(a);
+        body.addView(PartyUi.text(a, "Kiosk-forbindelse fra Party Guest ingress: http://HA-IP:8102/#token=PARTY_GUEST_API_TOKEN. AI DJ er valgfri og har sin egen adresse.", 15, PartyUi.MUTED));
+        EditText field = new EditText(a); field.setSingleLine(false); field.setTextColor(PartyUi.INK);
+        field.setText(context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).getString("guest_url", ""));
+        body.addView(field, new LinearLayout.LayoutParams(-1, -2));
+        addPanelAction(body, "Gem gæsteforbindelse", false, () -> {
+            String url = field.getText().toString().trim();
+            if (!validDjUrl(url)) { field.setError("Angiv Party Guest-adressen fra ingress"); return; }
+            context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit().putString("guest_url", url).apply();
+            syncGuestModes(); clearPartyGuests(); partyGuestLastPoll = 0; dismissSearch(); updateParty(); pollPartyGuests();
+        });
+        openSheet(a, "Party Guest · forbindelse", body, false);
+    }
     private void showDj() { showSearch("ai"); }
     private boolean hasSearchModes() { return allowSearch && (searchLibrary || searchSimilar || searchAi); }
     private void setSearchMode(String key, boolean enabled) {
@@ -697,7 +718,7 @@ public final class PartyModePlugin implements KioskPlugin {
                 ai = allowSearch && searchAi, current = allowSearch && currentSimilar;
         if (queue.isEmpty()) return;
         io.execute(() -> {
-            try { djRequest("/api/guest-link", new JSONObject().put("queue_id", queue).put("modes",
+            try { companionRequest(guestConnection(), "Party Guest", "/api/guest-link", new JSONObject().put("queue_id", queue).put("modes",
                     new JSONObject().put("library", library).put("similar", similar).put("ai", ai).put("current_similar", current))); }
             catch (Exception ignored) { /* Normal when the optional companion is not configured. */ }
         });
@@ -796,15 +817,17 @@ public final class PartyModePlugin implements KioskPlugin {
         submit.setOnClickListener(v -> search.run()); input.setOnEditorActionListener((v, action, event) -> { if (action == EditorInfo.IME_ACTION_SEARCH) { search.run(); return true; } return false; });
     }
     private JSONObject djRequest(String path, JSONObject data) throws Exception {
-        String saved = context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).getString("dj_url", "");
-        if (!validDjUrl(saved)) throw new java.io.IOException("AI DJ er ikke forbundet. Åbn forbindelsen i Party-indstillinger.");
+        return companionRequest(context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).getString("dj_url", ""), "AI DJ", path, data);
+    }
+    private JSONObject companionRequest(String saved, String service, String path, JSONObject data) throws Exception {
+        if (!validDjUrl(saved)) throw new java.io.IOException(service + " er ikke forbundet. Åbn forbindelsen i Party-indstillinger.");
         java.net.URI parsed = new java.net.URI(saved);
         String token = "";
         for (String part : (parsed.getRawFragment() == null ? "" : parsed.getRawFragment()).split("&")) {
             String[] pair = part.split("=", 2);
             if (pair.length == 2 && "token".equals(pair[0])) token = java.net.URLDecoder.decode(pair[1], "UTF-8");
         }
-        if (token.length() < 24) throw new java.io.IOException("AI DJ-forbindelsen mangler et gyldigt token.");
+        if (token.length() < 24) throw new java.io.IOException(service + "-forbindelsen mangler et gyldigt token.");
         java.net.URI origin = new java.net.URI(parsed.getScheme(), null, parsed.getHost(), parsed.getPort(), path, null, null);
         HttpURLConnection c = (HttpURLConnection) origin.toURL().openConnection();
         c.setInstanceFollowRedirects(false); c.setConnectTimeout(2500); c.setReadTimeout(5000); c.setUseCaches(false);
@@ -816,10 +839,10 @@ public final class PartyModePlugin implements KioskPlugin {
                 try (java.io.OutputStream out = c.getOutputStream()) { out.write(bytes); }
             }
             int code = c.getResponseCode();
-            if (code != 200 && code != 202) throw new java.io.IOException(code == 401 ? "AI DJ afviste forbindelsen. Kontrollér tokenet." : "AI DJ svarede med fejl " + code + ". Prøv igen senere.");
+            if (code != 200 && code != 202) throw new java.io.IOException(code == 401 ? service + " afviste forbindelsen. Kontrollér tokenet." : service + " svarede med fejl " + code + ". Prøv igen senere.");
             try (InputStream in = c.getInputStream()) {
                 java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream(); byte[] chunk = new byte[4096]; int n;
-                while ((n = in.read(chunk)) >= 0) { if (bytes.size() + n > 512 * 1024) throw new java.io.IOException("AI-resultatet er for stort"); bytes.write(chunk, 0, n); }
+                while ((n = in.read(chunk)) >= 0) { if (bytes.size() + n > 512 * 1024) throw new java.io.IOException(service + "-svaret er for stort"); bytes.write(chunk, 0, n); }
                 return new JSONObject(bytes.toString("UTF-8"));
             }
         } finally { c.disconnect(); }
@@ -1251,6 +1274,7 @@ public final class PartyModePlugin implements KioskPlugin {
             addPanelAction(rows, "Vis gæste-QR", partyGuestsFollow, () -> { setPartyGuests(!partyGuestsFollow); showPartyMenu(anchor); });
             addPanelAction(rows, "Aktivér gæsteadgang i MA", false, () -> changePartyGuestAccess(true));
             addPanelAction(rows, "Deaktivér gæsteadgang i MA", false, () -> changePartyGuestAccess(false));
+            addPanelAction(rows, "Party Guest · opsæt adresse", false, this::configureGuest);
             addPanelAction(rows, "QR · Music Assistant", "Music Assistant".equals(guestPage), () -> { setGuestPage("Music Assistant"); showPartyMenu(anchor); });
             addPanelAction(rows, "QR · vores Party-gæsteside", "Party guest page".equals(guestPage), () -> { setGuestPage("Party guest page"); showPartyMenu(anchor); });
         }
@@ -1404,7 +1428,7 @@ public final class PartyModePlugin implements KioskPlugin {
         final String token = maToken;
         final long generation = partyGuestGeneration;
         final String destination = guestPage;
-        final String configuredDj = context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).getString("dj_url", "");
+        final String configuredGuest = guestConnection();
         final boolean useLibrary = allowSearch && searchLibrary, useSimilar = allowSearch && searchSimilar, useAi = allowSearch && searchAi, useCurrent = allowSearch && currentSimilar;
         final String previousUrl = partyGuestUrl;
         final Bitmap previousQr = partyQr;
@@ -1416,11 +1440,11 @@ public final class PartyModePlugin implements KioskPlugin {
             try {
                 if ("Party guest page".equals(destination)) {
                     JSONObject modes = new JSONObject().put("library", useLibrary).put("similar", useSimilar).put("ai", useAi).put("current_similar", useCurrent);
-                    JSONObject result = djRequest("/api/guest-link", new JSONObject().put("queue_id", queue).put("modes", modes));
-                    url = PartyGuestLink.custom(result.optString("path", ""), configuredDj);
+                    JSONObject result = companionRequest(configuredGuest, "Party Guest", "/api/guest-link", new JSONObject().put("queue_id", queue).put("modes", modes));
+                    url = PartyGuestLink.custom(result.optString("path", ""), configuredGuest);
                     qr = url.equals(previousUrl) && previousQr != null ? previousQr : partyQrBitmap(url);
-                    caption = "Scan · Søg, Similar og AI DJ";
-                    message = url.isEmpty() || qr == null ? "Gæste-QR: kontrollér Party AI DJ 0.1.4 og dens kø-id" : "";
+                    caption = "Scan og find musik til festen";
+                    message = url.isEmpty() || qr == null ? "Gæste-QR: kontrollér Party Guest og dens kø-id" : "";
                 } else {
                 Object player = partyRequest(base, token, "party/player", new JSONObject());
                 if (PartyGuestLink.matches(queue, player)) {
@@ -1442,7 +1466,7 @@ public final class PartyModePlugin implements KioskPlugin {
                     message = "Vælg samme højttalergruppe som Party Player i Music Assistant";
                 }
                 }
-            } catch (Throwable ignored) { message = "Party guest page".equals(destination) ? "Gæste-QR: kontrollér AI DJ-adresse, token, version og samme kø-id" : "Gæste-QR: MA-forbindelsen kunne ikke bekræftes"; }
+            } catch (Throwable ignored) { message = "Party guest page".equals(destination) ? "Gæste-QR: kontrollér Party Guest-adresse, token og samme kø-id" : "Gæste-QR: MA-forbindelsen kunne ikke bekræftes"; }
             final String join = url, status = message, text = caption;
             final Bitmap symbol = qr;
             main.post(() -> {
