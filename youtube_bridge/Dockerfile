@@ -8,5 +8,5 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 python3
 WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
-COPY bridge.py index.html ./
+COPY bridge.py captions.py index.html ./
 CMD ["python", "bridge.py"]
