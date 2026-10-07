@@ -81,11 +81,12 @@ class PortalTest(unittest.TestCase):
     def test_similar_buttons_use_only_queue_rows_or_owned_results(self):
         original = {'uri': 'library://track/7', 'name': 'Jazz'}
         match = {'uri': 'library://track/8', 'name': 'More Jazz'}
+        alternate = {'uri': 'library://track/9', 'name': 'A different reference'}
         item = {'queue_item_id': 'q7', 'media_item': original}
         def ma(cmd, args):
             if cmd == 'player_queues/get': return {'current_item': item, 'current_index': 0}
-            if cmd == 'player_queues/items': return [item]
-            if cmd == 'music/search': return {'tracks': [original]}
+            if cmd == 'player_queues/items': return [item, {'queue_item_id': 'q9', 'media_item': alternate}]
+            if cmd == 'music/search': return {'tracks': [original, alternate]}
             if cmd == 'music/tracks/similar_tracks': return [match]
             if cmd == 'player_queues/play_media': return None
             raise AssertionError(cmd)
@@ -94,12 +95,13 @@ class PortalTest(unittest.TestCase):
         session = self.portal.guests.session(self.token)
         session['modes']['similar'] = False
         session['last'] = -1000
-        linked = self.portal.guests.search(self.token, {'mode': 'track_similar', 'id': result['id'], 'index': 0})
-        self.portal.ma.assert_called_with('music/tracks/similar_tracks', {'item_id': '7', 'provider_instance_id_or_domain': 'library', 'limit': 12, 'allow_lookup': True})
+        linked = self.portal.guests.search(self.token, {'mode': 'track_similar', 'id': result['id'], 'index': 1})
+        self.portal.ma.assert_called_with('music/tracks/similar_tracks', {'item_id': '9', 'provider_instance_id_or_domain': 'library', 'limit': 12, 'allow_lookup': True})
         self.portal.guests.enqueue(self.token, {'id': linked['id'], 'indices': [0]})
         self.portal.ma.assert_called_with('player_queues/play_media', {'queue_id': 'group', 'media': ['library://track/8'], 'option': 'add'})
         session['last'] = -1000
-        self.portal.guests.search(self.token, {'mode': 'track_similar', 'queue_item_id': 'q7'})
+        self.portal.guests.search(self.token, {'mode': 'track_similar', 'queue_item_id': 'q9'})
+        self.portal.ma.assert_called_with('music/tracks/similar_tracks', {'item_id': '9', 'provider_instance_id_or_domain': 'library', 'limit': 12, 'allow_lookup': True})
         for bad in [{'uri': 'spotify://track/arbitrary'}, {'queue_item_id': 'other-queue'}, {'id': 'another-guest', 'index': 0}, {'id': result['id'], 'index': True}, {'id': result['id'], 'index': -1}]:
             session['last'] = -1000
             with self.assertRaises(ValueError): self.portal.guests.search(self.token, {'mode': 'track_similar', **bad})
