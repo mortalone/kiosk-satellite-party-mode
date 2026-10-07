@@ -27,6 +27,16 @@ Search for a full YouTube watch/shorts/youtu.be URL in MA. This resolves the exa
 
 The ingress page is a helper; regular search, playback, mixed queues and MA playlists are handled inside MA. The helper is on a separate internal port and is not exposed by the app's host port mapping. The Subsonic API requires authentication. Credentials travel over local HTTP; do not expose port 8102 to the internet.
 
+## Optional lyrics (0.1.2+)
+
+The app exposes the concrete video's captions as lyrics via the OpenSubsonic `songLyrics` extension. In app Configuration, **Hent sangtekster** (`lyrics_enabled`) defaults to on; **Tillad automatiske undertekster** (`allow_auto_lyrics`) defaults to off. Turn the first off to disable all caption lookup. The second allows automatic YouTube captions when uploader captions are unavailable. These may contain recognition errors, speech, or audience noise; uploader captions may also contain speech rather than song lyrics. No YouTube Music lyric matching is performed.
+
+The bridge prefers the original language when YouTube identifies it, otherwise an available caption track. Machine-translated tracks marked with `tlang` are excluded. JSON3 and WebVTT timestamps are preserved as line-level timing for MA; no alignment to a different recording is attempted.
+
+Lyrics are cached in the persistent SQLite catalog for seven days, absent captions for one hour, and failed requests for five minutes. The automatic-caption setting has a separate cache, so disabling it cannot return a previously cached automatic transcript. A request waits at most eight seconds, then returns no lyrics while lookup finishes in the background. Caption lookup runs separately from audio extraction, with at most two workers; its errors never propagate as playback errors. If the first lookup was slow, text can appear after the track metadata is refreshed in MA. MA also caches metadata, so restarting the bridge alone does not necessarily refresh text for already loaded tracks.
+
+After updating, reload the YouTube/OpenSubsonic source in MA (or restart MA) so it detects the new `songLyrics` capability. This enables timed text in MA; display in another client, including the Kiosk lyric overlay, depends on that client's lyric support. No change to that client is included in this release.
+
 ## Audio cache and limitations
 
 Audio is fetched on demand, converted to stereo MP3 at 192 kbps / 44.1 kHz, and stored in a bounded cache for reliable HTTP Range requests, seeking and repeat playback. The first play waits for downloading/converting the track. This is not instantaneous direct streaming. Cached playback starts faster. MP3 conversion cannot improve the source quality. The cache is separate from the persistent catalog: eviction removes audio, not playlist IDs.
@@ -39,4 +49,4 @@ Optional cookies can be placed as `/data/cookies.txt` by an administrator inside
 
 ## Validation status
 
-The protocol is tested against **py-opensonic 10.4.1**, the client used by MA 2.10.5. Tests cover login, JSON/XML replies, search, album/artist lookup, persistent video IDs, playlists, and authenticated MP3 Range playback using controlled YouTube fixtures. Live YouTube extraction and an actual Spotify+YouTube mixed playlist on the user's HA installation must still be tested after installation. This is an initial experimental release, not a claim of verified end-to-end playback.
+The protocol is tested against **py-opensonic 10.4.1**, the client used by MA 2.10.5. Tests cover login, JSON/XML replies, search, album/artist lookup, persistent video IDs, playlists, authenticated MP3 Range playback, and caption parsing/cache/policy/failure handling using controlled fixtures. Live YouTube extraction and an actual Spotify+YouTube mixed playlist on the user's HA installation must still be tested after installation. This is an initial experimental release, not a claim of verified end-to-end playback.

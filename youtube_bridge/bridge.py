@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 
 LOG = logging.getLogger("youtube_bridge")
 VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
-VERSION = "0.1.1"
+VERSION = "0.1.2"
 
 
 class BridgeError(Exception):
@@ -71,6 +71,8 @@ class Bridge:
         self.limit = min(30, max(1, int(options.get("search_limit", 10))))
         self.cache_mb = max(128, int(options.get("cache_mb", 512)))
         self.max_minutes = max(1, int(options.get("max_track_minutes", 120)))
+        self.lyrics_enabled = options.get("lyrics_enabled", True)
+        self.allow_auto_lyrics = options.get("allow_auto_lyrics", False)
         self.data = data
         data.mkdir(parents=True, exist_ok=True)
         self.cache = data / "cache"
@@ -80,10 +82,13 @@ class Bridge:
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("CREATE TABLE IF NOT EXISTS tracks (id TEXT PRIMARY KEY, payload TEXT NOT NULL, saved INTEGER NOT NULL DEFAULT 0, starred TEXT, added TEXT NOT NULL)")
         self.db.execute("CREATE TABLE IF NOT EXISTS playlists (id TEXT PRIMARY KEY, name TEXT NOT NULL, entries TEXT NOT NULL, created TEXT NOT NULL)")
+        self.db.execute("CREATE TABLE IF NOT EXISTS lyrics (id TEXT NOT NULL, policy INTEGER NOT NULL, payload TEXT NOT NULL, expires REAL NOT NULL, PRIMARY KEY(id,policy))")
         self.db.commit()
         self.jobs = asyncio.Semaphore(2)
         self.search_cache: dict[str, tuple[float, list[dict]]] = {}
         self.audio_tasks: dict[str, asyncio.Task] = {}
+        self.lyrics_tasks: dict[tuple[str, bool], asyncio.Task] = {}
+        self.lyrics_wait_seconds = 8
         # Pinned files cannot be evicted while being served to MA.
         self.readers: dict[str, int] = {}
         self.cache_lock = asyncio.Lock()
@@ -198,6 +203,69 @@ class Bridge:
             return existing
         output = await self.command(["--skip-download", "--dump-single-json", "https://www.youtube.com/watch?v=" + item_id])
         return self.put(json.loads(output), saved)
+
+    async def caption_command(self, item_id: str, allow_auto: bool) -> dict:
+        cookies = self.data / "cookies.txt"
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable, str(Path(__file__).with_name("captions.py")), item_id,
+            "1" if allow_auto else "0", str(cookies) if cookies.exists() else "",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+        try:
+            output, _ = await asyncio.wait_for(proc.communicate(), 35)
+        except BaseException:
+            if proc.returncode is None:
+                proc.kill()
+            await proc.wait()
+            raise
+        if proc.returncode:
+            raise BridgeError("Caption lookup failed")
+        return json.loads(output)
+
+    async def fetch_lyrics(self, item_id: str, policy: bool) -> list[dict]:
+        try:
+            result = await self.caption_command(item_id, policy)
+            lyrics = result.get("lyrics") or []
+            failed = result.get("failed", False)
+            if result.get("automatic") and not policy:
+                lyrics = []
+            # Positive cache: 7 days; missing captions: 1 hour; failed lookup: 5 minutes.
+            ttl = 300 if failed else (7 * 86400 if lyrics else 3600)
+        except Exception:
+            LOG.debug("Caption lookup unavailable for video %s", item_id)
+            lyrics, ttl = [], 300
+        self.db.execute("INSERT OR REPLACE INTO lyrics VALUES(?,?,?,?)",
+                        (item_id, int(policy), json.dumps(lyrics), time.time() + ttl))
+        self.db.commit()
+        return lyrics
+
+    async def lyrics(self, item_id: str) -> list[dict]:
+        if not self.lyrics_enabled or not VIDEO_ID.fullmatch(item_id):
+            return []
+        policy = bool(self.allow_auto_lyrics)
+        row = self.db.execute("SELECT payload,expires FROM lyrics WHERE id=? AND policy=?",
+                              (item_id, int(policy))).fetchone()
+        if row and row["expires"] > time.time():
+            return json.loads(row["payload"])
+        key = (item_id, policy)
+        task = self.lyrics_tasks.get(key)
+        if task is None:
+            # Captions cannot consume every worker while audio is starting.
+            if len(self.lyrics_tasks) >= 2:
+                return []
+            task = asyncio.create_task(self.fetch_lyrics(item_id, policy))
+            self.lyrics_tasks[key] = task
+            def done(completed):
+                self.lyrics_tasks.pop(key, None)
+                if not completed.cancelled():
+                    completed.exception()
+            task.add_done_callback(done)
+        try:
+            return await asyncio.wait_for(asyncio.shield(task), self.lyrics_wait_seconds)
+        except (Exception, asyncio.CancelledError) as exc:
+            if isinstance(exc, asyncio.CancelledError):
+                raise
+            # Slow extraction continues in the background; no error reaches MA.
+            return []
 
     async def search(self, query: str, count: int) -> list[dict]:
         direct = video_id(query)
@@ -319,7 +387,7 @@ class Bridge:
         if action == "getLicense":
             return {"license": {"valid": True}}
         if action == "getOpenSubsonicExtensions":
-            return {"openSubsonicExtensions": []}
+            return {"openSubsonicExtensions": [{"name": "songLyrics", "versions": [1]}]}
         if action == "search3":
             query = params.get("query", "")
             songs = await self.search(query, integer("songCount", 20) + integer("songOffset"))
@@ -339,9 +407,20 @@ class Bridge:
         if action == "getAlbumInfo2":
             return {"albumInfo": {}}
         if action == "getLyrics":
-            # MA requests legacy lyrics while resolving a track, before opening audio.
-            # Its provider catches code 70 (DataNotFoundError), but not error code 0.
+            # Legacy clients use title/artist; refuse ambiguous cover/version matches.
+            items = [t for t in self.tracks() if t["title"] == params.get("title")
+                     and t["artist"] == params.get("artist")]
+            if not items:
+                # Older MA providers pass title/artist positionally in reverse order.
+                items = [t for t in self.tracks() if t["title"] == params.get("artist")
+                         and t["artist"] == params.get("title")]
+            lyrics = await self.lyrics(items[0]["id"]) if len(items) == 1 else []
+            if lyrics:
+                return {"lyrics": {"artist": items[0]["artist"], "title": items[0]["title"],
+                                   "value": "\n".join(line["value"] for line in lyrics[0]["line"])}}
             raise BridgeError("Lyrics not found", 70)
+        if action == "getLyricsBySongId":
+            return {"lyricsList": {"structuredLyrics": await self.lyrics(required("id"))}}
         if action == "getArtistInfo2":
             return {"artistInfo2": {"similarArtist": []}}
         if action == "getArtist":
@@ -427,11 +506,17 @@ def protocol_response(params, payload: dict | None = None, error: BridgeError | 
             if isinstance(content, list):
                 for item in content:
                     child = ET.SubElement(element, name)
-                    fill(child, item)
+                    if isinstance(item, dict):
+                        fill(child, item)
+                    else:
+                        child.text = str(item)
             elif isinstance(content, dict):
                 fill(ET.SubElement(element, name), content)
             elif content is not None:
-                element.set(name, str(content).lower() if isinstance(content, bool) else str(content))
+                if name == "value" and element.tag in {"line", "lyrics"}:
+                    element.text = str(content)
+                else:
+                    element.set(name, str(content).lower() if isinstance(content, bool) else str(content))
     fill(root, body)
     return Response(ET.tostring(root, encoding="utf-8", xml_declaration=True), media_type="text/xml")
 
@@ -452,9 +537,10 @@ def make_app(bridge: Bridge, ui: bool = False) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app):
         yield
-        for task in list(bridge.audio_tasks.values()):
+        tasks = list(bridge.audio_tasks.values()) + list(bridge.lyrics_tasks.values())
+        for task in tasks:
             task.cancel()
-        await asyncio.gather(*bridge.audio_tasks.values(), return_exceptions=True)
+        await asyncio.gather(*tasks, return_exceptions=True)
     app = FastAPI(lifespan=lifespan)
 
     @app.get("/health")
