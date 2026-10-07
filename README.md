@@ -1,4 +1,4 @@
-> Nyeste: **Party Mode 0.1.15**, **Party Guest 0.2.4**, **Party AI DJ 0.1.9**. Party Guest har en lys gæsteside med Søg / Samme stil / AI og styrer nu køplacering og automatisk fortsættelse. Se [Party Guest-opsætning](party_guest/DOCS.md).
+> Nyeste: **Party Mode 0.1.16**, **Party Guest 0.2.4**, **Party AI DJ 0.1.9**. Party Guest har en lys gæsteside med Søg / Samme stil / AI og styrer nu køplacering og automatisk fortsættelse. Se [Party Guest-opsætning](party_guest/DOCS.md).
 
 # Party Mode for Kiosk Satellite
 
@@ -28,7 +28,7 @@ For **Guest QR destination → Music Assistant** (the default), select the same 
 
 Guest-enable/disable actions write only `enable_guest_access` on the single enabled Party provider whose explicit player matches this queue. The configured token needs provider-settings access. Ambiguous, Auto and unmatched providers are left untouched. Hiding the QR does not disable MA guest access.
 
-QR-størrelsen vælges på Kiosk under **Party-menu → Gæster → QR-størrelse · lille / mellem / stor**. Lille er standard. QR-koden vises i et diskret mørkt kort med overskrift og scanningstekst; den lyse kodeflade bevares for scanning. Valget gemmes efter genstart.
+QR-størrelsen vælges på Kiosk under **Party-menu → Gæster → QR-størrelse · lille / mellem / stor**. Lille er standard. QR-koden bruger nu højttaler, farvesplash og frekvensbarer med ekstra små farvede prikker, på et mørkt kort med overskrift og scanningstekst. Mønstret dannes lokalt til den aktuelle MA- eller Party Guest-adresse; QR-billedet indeholder aldrig en fast testadresse. Valget gemmes efter genstart.
 
 ### Independent Party guest page (0.1.14)
 

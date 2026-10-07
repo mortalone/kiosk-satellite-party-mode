@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build a Kiosk Satellite plugin ZIP with SDK 1 and Android D8."""
 import argparse, hashlib, json, os, re, subprocess, tempfile, zipfile
+from qr_asset import generate
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -56,9 +57,10 @@ with tempfile.TemporaryDirectory(prefix=f'ks-{manifest["id"]}-') as td:
     sdk_jar = td / "sdk.jar"
     subprocess.run(["jar", "cf", str(sdk_jar), "-C", str(sdk_classes), "."], check=True)
 
+    asset_source = [generate(ROOT, td / "qr-asset")] if project == ROOT else []
     subprocess.run(["javac", "--release", "8", "-cp", os.pathsep.join([str(sdk_jar), str(platform)]),
                     "-d", str(classes),
-                    *map(str, sorted(source_root.rglob("*.java")))], check=True)
+                    *map(str, sorted(source_root.rglob("*.java"))), *map(str, asset_source)], check=True)
 
     subprocess.run([str(d8), "--min-api", str(manifest["minAndroidSdk"]),
                     "--lib", str(platform), "--classpath", str(sdk_jar),

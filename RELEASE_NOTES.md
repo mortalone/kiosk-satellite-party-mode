@@ -1,3 +1,10 @@
+## 0.1.16
+
+- Use the approved speaker/splash/equalizer QR design with extra small colored dots, preserving full artwork color and local contrast.
+- Encode each current MA guest URL or expiring Party Guest capability locally with High error correction. No fixed test URL or external image service.
+- Embed the illustration in the plugin and keep an opaque dark backing and quiet zone over every visualizer. Existing QR sizes remain available.
+- Generate artwork only when the guest URL changes, on the existing background worker; playback animations do not regenerate it.
+
 ## 0.1.15
 
 - Make the guest QR about half its previous default width and integrate it into a compact dark card with a teal heading and muted caption.

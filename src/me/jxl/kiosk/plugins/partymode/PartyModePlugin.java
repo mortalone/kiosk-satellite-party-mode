@@ -32,7 +32,7 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
-import io.nayuki.qrcodegen.QrCode;
+import android.util.Base64;
 import me.jxl.kiosk.plugins.KioskPlugin;
 import me.jxl.kiosk.plugins.PluginHost;
 import org.json.JSONArray;
@@ -1547,12 +1547,16 @@ public final class PartyModePlugin implements KioskPlugin {
 
     private Bitmap partyQrBitmap(String url) {
         try {
-            QrCode qr = QrCode.encodeText(url, QrCode.Ecc.MEDIUM);
-            int scale = 6, side = (qr.size + 8) * scale;
-            int[] pixels = new int[side * side];
-            for (int y = 0; y < side; y++) for (int x = 0; x < side; x++)
-                pixels[y * side + x] = qr.getModule(x / scale - 4, y / scale - 4) ? Color.BLACK : Color.WHITE;
-            return Bitmap.createBitmap(pixels, side, side, Bitmap.Config.ARGB_8888);
+            byte[] bytes = Base64.decode(PartyQrIllustration.data(), Base64.DEFAULT);
+            Bitmap source = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+            if (source == null) return null;
+            Bitmap scaled = Bitmap.createScaledBitmap(source, PartyQrArt.SIDE, PartyQrArt.SIDE, true);
+            int[] illustration = new int[PartyQrArt.SIDE * PartyQrArt.SIDE];
+            scaled.getPixels(illustration, 0, PartyQrArt.SIDE, 0, 0, PartyQrArt.SIDE, PartyQrArt.SIDE);
+            if (scaled != source) scaled.recycle();
+            source.recycle();
+            int[] pixels = PartyQrArt.render(url, illustration);
+            return Bitmap.createBitmap(pixels, PartyQrArt.SIDE, PartyQrArt.SIDE, Bitmap.Config.ARGB_8888);
         } catch (Throwable ignored) { return null; }
     }
 

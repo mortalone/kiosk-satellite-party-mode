@@ -197,9 +197,9 @@ final class PartyView extends FrameLayout {
             guestQrSide = side;
             float x = landscape ? Math.max(22 * density, getWidth() * 0.035f) : (getWidth() - side) / 2;
             float y = landscape ? (getHeight() - side) / 2 - 10 * density : 88 * density;
-            // A compact card in the queue's palette; preserve the QR quiet zone.
+            // Opaque dark backing keeps the transparent artistic code readable over every visualizer.
             rect.set(x - 14 * density, y - 36 * density, x + side + 14 * density, y + side + 43 * density);
-            paint.setAlpha(255); paint.setColor(0xD918262D);
+            paint.setAlpha(255); paint.setColor(0xFF090E17);
             canvas.drawRoundRect(rect, 16 * density, 16 * density, paint);
             paint.setColor(0x445D7B83); paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(density);
             canvas.drawRoundRect(rect, 16 * density, 16 * density, paint); paint.setStyle(Paint.Style.FILL);

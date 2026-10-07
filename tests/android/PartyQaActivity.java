@@ -116,6 +116,12 @@ public final class PartyQaActivity extends Activity {
                         } catch (ReflectiveOperationException e) {throw new RuntimeException(e);}
                     }
                     if ("main".equals(mode) && field("partyQr") == null) throw new AssertionError("MA guest QR absent");
+                    if ("main".equals(mode) || "guestpage".equals(mode)) {
+                        try (FileOutputStream stream = new FileOutputStream(new File(getExternalFilesDir(null), "qr-" + mode + ".png"))) {
+                            if (!((Bitmap)field("partyQr")).compress(Bitmap.CompressFormat.PNG,100,stream)) throw new AssertionError("QR export failed");
+                        } catch(IOException e) { throw new RuntimeException(e); }
+                        android.util.Log.i("PARTY_QA", "QA_QR_URL " + mode + " " + field("partyGuestUrl"));
+                    }
                     if ("main".equals(mode) && hasDescription(getWindow().getDecorView(), "Afslut Party Mode")) throw new AssertionError("default Close visible");
                     if ("settings".equals(mode) && !hasText(((Dialog)field("searchDialog")).getWindow().getDecorView(), "VISUALISERING")) throw new AssertionError("new menu missing");
                     if ("playlists".equals(mode) && !hasText(((Dialog)field("searchDialog")).getWindow().getDecorView(), "Fredagsfest")) throw new AssertionError("favorites missing");
