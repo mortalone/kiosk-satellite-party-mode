@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 
 LOG = logging.getLogger("youtube_bridge")
 VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 
 
 class BridgeError(Exception):
@@ -338,6 +338,10 @@ class Bridge:
             return {"album": self.album(await self.detail(key[6:]), songs=True)}
         if action == "getAlbumInfo2":
             return {"albumInfo": {}}
+        if action == "getLyrics":
+            # MA requests legacy lyrics while resolving a track, before opening audio.
+            # Its provider catches code 70 (DataNotFoundError), but not error code 0.
+            raise BridgeError("Lyrics not found", 70)
         if action == "getArtistInfo2":
             return {"artistInfo2": {"similarArtist": []}}
         if action == "getArtist":
@@ -489,7 +493,10 @@ def make_app(bridge: Bridge, ui: bool = False) -> FastAPI:
             except (BridgeError, asyncio.TimeoutError, ValueError, json.JSONDecodeError) as exc:
                 if not isinstance(exc, BridgeError):
                     exc = BridgeError("YouTube request timed out or returned invalid data")
-                LOG.warning("%s failed: %s", action, exc)
+                if action == "getLyrics" and exc.code == 70:
+                    LOG.debug("Lyrics not found")
+                else:
+                    LOG.warning("%s failed: %s", action, exc)
                 return protocol_response(params, error=exc)
     else:
         @app.get("/", response_class=HTMLResponse)

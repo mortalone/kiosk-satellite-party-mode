@@ -1,5 +1,5 @@
 name: YouTube Bridge for Music Assistant
-version: "0.1.0"
+version: "0.1.1"
 slug: youtube_bridge
 description: Search ordinary YouTube in official Music Assistant through OpenSubsonic
 url: https://github.com/mortalone/kiosk-satellite-party-mode/tree/main/youtube_bridge
