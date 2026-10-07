@@ -22,3 +22,7 @@ authors or copyright holders be liable for any claim, damages or other
 liability, whether in an action of contract, tort or otherwise, arising from,
 out of or in connection with the Software or the use or other dealings in the
 Software.
+
+Music Assistant frontend changes under ma_ai_dj/frontend.patch are based on
+https://github.com/music-assistant/frontend and retain its Apache-2.0 license.
+See ma_ai_dj/LICENSE-MA-frontend. The patch reuses the existing MA Party guest UI.

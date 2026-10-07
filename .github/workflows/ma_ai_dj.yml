@@ -1,0 +1,37 @@
+name: Verify Music Assistant AI DJ integration source
+on:
+  push:
+    branches: [main]
+    paths: ["ma_ai_dj/**", ".github/workflows/ma_ai_dj.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m unittest discover -s ma_ai_dj/tests -v
+      - run: python -m compileall -q ma_ai_dj/provider
+      - name: Fetch pinned MA source and apply integration
+        run: |
+          git clone https://github.com/music-assistant/server.git /tmp/ma-server
+          git clone https://github.com/music-assistant/frontend.git /tmp/ma-frontend
+          git -C /tmp/ma-server checkout $(python -c 'import json; print(json.load(open("ma_ai_dj/upstream.json"))["server"])')
+          git -C /tmp/ma-frontend checkout $(python -c 'import json; print(json.load(open("ma_ai_dj/upstream.json"))["frontend"])')
+          python ma_ai_dj/apply.py --server /tmp/ma-server --frontend /tmp/ma-frontend
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: corepack enable
+      - name: Check and build existing MA guest UI
+        working-directory: /tmp/ma-frontend
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec vue-tsc --noEmit
+          pnpm exec vite build

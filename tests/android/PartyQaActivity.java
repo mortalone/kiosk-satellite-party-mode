@@ -22,16 +22,22 @@ public final class PartyQaActivity extends Activity {
     private final PartyModePlugin plugin = new PartyModePlugin();
     private ServerSocket server;
     private boolean publishedPartyState;
+    private final Map<String, Boolean> switches = new HashMap<>();
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
         @Override public void onReceive(Context c, Intent intent) {
             String mode = intent.getStringExtra("mode");
             try {
                 call("dismissSearch");
-                if ("search".equals(mode) || "placement".equals(mode) || "ai".equals(mode)) {
+                if ("search".equals(mode) || "placement".equals(mode) || "ai".equals(mode) || "similar".equals(mode)) {
                     call("showSearch"); Dialog dialog = (Dialog)field("searchDialog");
-                    if ("ai".equals(mode)) findText(dialog.getWindow().getDecorView(), "Similarity · søg efter stemning").performClick();
+                    if ("ai".equals(mode) && findText(dialog.getWindow().getDecorView(), "AI DJ") == null) throw new AssertionError("AI tab absent");
+                    if ("ai".equals(mode)) findText(dialog.getWindow().getDecorView(), "AI DJ").performClick();
+                    if ("similar".equals(mode)) findText(dialog.getWindow().getDecorView(), "Similar").performClick();
                     EditText input = findEdit(dialog.getWindow().getDecorView()); input.setText("party"); input.onEditorAction(EditorInfo.IME_ACTION_SEARCH);
                     if ("placement".equals(mode)) main.postDelayed(() -> { Dialog d = (Dialog)field("searchDialog"); TextView t = findText(d.getWindow().getDecorView(), "Aftenlys"); if (t == null) throw new AssertionError("search results absent"); ((View)t.getParent().getParent()).performClick(); }, 700);
+                } else if ("searchswitches".equals(mode)) {
+                    plugin.onEvent("switch.search_ai", Collections.singletonMap("on", false));
+                    main.postDelayed(() -> { try { call("showSearch"); } catch (Exception e) { throw new RuntimeException(e); } }, 300);
                 } else if ("settings".equals(mode)) call("showPartyMenu", View.class, new View(PartyQaActivity.this));
                 else if ("playlists".equals(mode)) call("showPlaylists");
                 else if ("dj".equals(mode)) call("configureDj");
@@ -46,12 +52,19 @@ public final class PartyQaActivity extends Activity {
                 else if ("main".equals(mode)) call("setPartyEffect", String.class, "mirror");
                 main.postDelayed(() -> {
                     PartyView view = (PartyView)field("partyView");
+                    if ("searchswitches".equals(mode)) {
+                        Dialog panel = (Dialog)field("searchDialog");
+                        if (panel == null || hasText(panel.getWindow().getDecorView(), "AI DJ") || !Boolean.FALSE.equals(switches.get("search_ai"))) throw new AssertionError("AI switch did not hide the pill");
+                    }
                     if ("switch".equals(mode) && !publishedPartyState) throw new AssertionError("HA switch did not report Party active");
                     if (view == null) throw new AssertionError("Party root missing");
+                    if ("main".equals(mode) && (!switches.containsKey("search_ai") || !switches.containsKey("search_similar") || !switches.containsKey("search_library") || !switches.containsKey("current_similar"))) throw new AssertionError("search switches absent");
+                    if ("main".equals(mode) && field("partyQr") == null) throw new AssertionError("MA guest QR absent");
                     if ("main".equals(mode) && hasDescription(getWindow().getDecorView(), "Afslut Party Mode")) throw new AssertionError("default Close visible");
                     if ("settings".equals(mode) && !hasText(((Dialog)field("searchDialog")).getWindow().getDecorView(), "VISUALISERING")) throw new AssertionError("new menu missing");
                     if ("playlists".equals(mode) && !hasText(((Dialog)field("searchDialog")).getWindow().getDecorView(), "Fredagsfest")) throw new AssertionError("favorites missing");
                     if (("lyrics".equals(mode) || "discolyrics".equals(mode)) && (!((PartyLyrics)field("lyrics")).synced || ((PartyLyrics)field("lyrics")).lines.isEmpty())) throw new AssertionError("on-demand MA lyrics not displayed");
+                    if ("ai".equals(mode) && !hasText(((Dialog)field("searchDialog")).getWindow().getDecorView(), "Aftenlys")) throw new AssertionError("native AI API results absent");
                     if ("placement".equals(mode) && field("selectionDialog") == null) throw new AssertionError("placement panel missing");
                     android.util.Log.i("PARTY_QA", "QA_READY " + mode + " hardware=" + view.hardwareCanvas());
                 }, 1600);
@@ -62,8 +75,9 @@ public final class PartyQaActivity extends Activity {
         super.onCreate(state);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
         setContentView(new FrameLayout(this)); startServer();
+        getSharedPreferences("party_mode_presentation", MODE_PRIVATE).edit().putString("dj_url", "http://127.0.0.1:18095/#token=public-emulator-dj-fixture-token").putBoolean("search_ai", true).commit();
         getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE).edit().putString("flutter.ks.sendspin.ma_url", "http://127.0.0.1:18095").putString("flutter.ks.sendspin.ma_token", "public-emulator-fixture").commit();
-        Map<String,Object> settings = new HashMap<>(); settings.put("speakerEntity", "media_player.qa"); settings.put("startAutomatically", true); settings.put("showGuestQr", false);
+        Map<String,Object> settings = new HashMap<>(); settings.put("speakerEntity", "media_player.qa"); settings.put("startAutomatically", true); settings.put("showGuestQr", true);
         settings.put("screenControls", "Menu only"); settings.put("effect", "mirror"); settings.put("allowSearch", true); settings.put("allowQueueTap", true); settings.put("extraControls", "Playlists and EQ");
         settings.put("volumeControls", "Buttons"); settings.put("tracksBefore", 4); settings.put("tracksAfter", 4);
         plugin.start(new PluginHost() {
@@ -74,7 +88,7 @@ public final class PartyQaActivity extends Activity {
                 } else callback.onResult(true, Collections.emptyMap(), null);
             }
             @Override public void publishSelect(String key, String name, String[] options, String value) {}
-            @Override public void publishSwitch(String key, String name, boolean state) { if (!"active".equals(key)) throw new AssertionError(key); publishedPartyState = state; }
+            @Override public void publishSwitch(String key, String name, boolean state) { switches.put(key, state); if ("active".equals(key)) publishedPartyState = state; }
             @Override public void subscribe(String event) {} @Override public void unsubscribe(String event) {}
             @Override public void showWindow(String a, String b, String c) {} @Override public void hideWindow() {}
             @Override public void log(String message) { android.util.Log.i("PARTY_QA", message); }
@@ -107,6 +121,9 @@ public final class PartyQaActivity extends Activity {
         String cmd=request.optString("command");JSONObject args=request.optJSONObject("args");
         if(cmd.equals("player_queues/get"))return new JSONObject().put("queue_id","qa-group").put("current_index",4).put("items",9).put("elapsed_time",39).put("state","playing").put("current_item",item(4)).put("next_item",item(5));
         if(cmd.equals("player_queues/items")){JSONArray items=new JSONArray();for(int i=args.optInt("offset");i<Math.min(9,args.optInt("offset")+args.optInt("limit"));i++)items.put(item(i));return items;}
+        if(cmd.equals("party/player")) return "qa-group";
+        if(cmd.equals("party/url")) return "http://192.168.0.18:8095/?join=public-test-code";
+        if(cmd.equals("party/config")) return new JSONObject().put("qr_text", "Scan og ønsk musik");
         if(cmd.equals("players/get"))return new JSONObject().put("player_id","qa-group").put("available",true).put("group_volume",42);
         if(cmd.equals("music/search")){JSONArray tracks=new JSONArray();for(int i=4;i<9;i++)tracks.put(media(i));return new JSONObject().put("tracks",tracks);}
         if(cmd.equals("music/playlists/library_items")){JSONArray items=new JSONArray();String[] names={"Fredagsfest","Rolig aften","Sommer i haven"};for(int i=0;i<3;i++)items.put(media(i).put("name",names[i]).put("uri","library://playlist/"+i).put("favorite",true));return items;}
@@ -123,10 +140,18 @@ public final class PartyQaActivity extends Activity {
         new Thread(()->{while(!server.isClosed())try{Socket socket=server.accept();new Thread(()->serve(socket)).start();}catch(IOException e){break;}},"qa-ma").start();
     }
     private void serve(Socket socket) { try(Socket s=socket){
-        BufferedReader in=new BufferedReader(new InputStreamReader(s.getInputStream(),"UTF-8"));String first=in.readLine(),header;int length=0;
-        while((header=in.readLine())!=null&&!header.isEmpty())if(header.toLowerCase().startsWith("content-length:"))length=Integer.parseInt(header.substring(15).trim());
+        BufferedReader in=new BufferedReader(new InputStreamReader(s.getInputStream(),"UTF-8"));String first=in.readLine(),header,auth="";int length=0;
+        while((header=in.readLine())!=null&&!header.isEmpty()) {
+            if(header.toLowerCase().startsWith("content-length:"))length=Integer.parseInt(header.substring(15).trim());
+            if(header.toLowerCase().startsWith("authorization:"))auth=header.substring(14).trim();
+        }
         byte[] data;String content;
-        if(first.startsWith("GET")){
+        if(first.contains("/api/suggest") || first.contains("/api/jobs/")) {
+            if (!"Bearer public-emulator-dj-fixture-token".equals(auth)) throw new AssertionError("DJ API token not sent");
+            JSONObject result = new JSONObject().put("id", "fixture-job");
+            if (first.contains("/api/jobs/")) result.put("state", "ready").put("tracks", new JSONArray().put(media(4)).put(media(5)));
+            data=result.toString().getBytes("UTF-8"); content="application/json";
+        }else if(first.startsWith("GET")){
             Bitmap bitmap=Bitmap.createBitmap(160,160,Bitmap.Config.ARGB_8888);Canvas c=new Canvas(bitmap);Paint p=new Paint(3);int i=Character.getNumericValue(first.split(" ")[1].charAt(first.split(" ")[1].length()-1));
             p.setShader(new LinearGradient(0,0,160,160,new int[]{Color.HSVToColor(new float[]{i*37%360,.65f,.85f}),0xFF131A2A},null,Shader.TileMode.CLAMP));c.drawRect(0,0,160,160,p);p.setShader(null);p.setColor(0x8065E5CF);c.drawCircle(80,80,42,p);
             p.setColor(Color.WHITE);p.setTextSize(48);c.drawText("♪",58,98,p);ByteArrayOutputStream bytes=new ByteArrayOutputStream();bitmap.compress(Bitmap.CompressFormat.PNG,100,bytes);data=bytes.toByteArray();content="image/png";

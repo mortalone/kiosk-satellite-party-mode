@@ -1,9 +1,9 @@
-Party Mode 0.1.10
+Party Mode 0.1.11
 
-- Adds a Guest access HA switch for Music Assistant's actual guest access on the explicitly matching Party player group.
-- Publishes guest access only after reading a confirmed boolean from MA. Handles MA's omitted false default. Reads back configuration after saves and does not guess off when status is unavailable, ambiguous or belongs to another group.
-- Refreshes guest access every 15 seconds, independently of QR visibility and full-screen Party Mode.
-- Adds a separate saved Guest QR switch. Hiding QR does not revoke MA access.
-- Preserves the existing Party Mode switch and enable/disable actions.
-- Switches use Kiosk's separate entity budget, without adding ordinary settings or commands.
-- Adds guest-state parsing and target-isolation regression checks.
+- One search button opens Library, Similarity and AI DJ pills with a shared input and explanations. AI DJ uses the working addon API, native cover-art results and the usual queue-position picker; the standalone DJ button is removed.
+- Adds saved HA switches Search: Library, Search: Similarity, Search: AI DJ and Similar to current track, without consuming manifest settings. The master Allow music search setting remains authoritative.
+- Similarity offers a button based on the track currently playing and optional per-result buttons. Disabling a mode dismisses its open panel and prevents stale results from returning.
+- Guest QR always follows the existing Music Assistant Party guest portal. The old alternate AI-addon QR is retired so Guest access no longer points at a separate portal.
+- Shows a short QR connection/setup explanation on the screen when no usable QR is available. Checks the selected group's queue before offering a guest link.
+- Adds an experimental Music Assistant AI DJ provider and a patch to its existing guest page under ma_ai_dj/. This is source for a customized MA build, not an automatically installable plugin in stock MA. Its results use MA's existing Party request/boost actions.
+- Verified Android compilation, queue/QR/playback regressions, and AI job session isolation. Physical Pi/HA setup and the native MA integration still need real-device validation.

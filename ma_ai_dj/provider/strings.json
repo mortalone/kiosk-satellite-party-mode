@@ -1,0 +1,9 @@
+{
+  "config_entries": {
+    "addon_url": {"label": "AI DJ addon address", "description": "For example http://192.168.0.18:8101. Use the existing Party AI DJ addon."},
+    "addon_token": {"label": "AI DJ addon token", "description": "The existing addon's api_token. It stays on the server."},
+    "guest_ai": {"label": "Allow guests to use AI DJ", "description": "Guests still use Party's ordinary request and boost permissions."}
+  },
+  "setup_flow": {"connection": {"title": "Connect Party AI DJ", "description": "Reuse your working AI DJ addon in the existing Music Assistant Party guest page."}},
+  "manifest": {"description": "Find playable music from a mood or request using your existing AI DJ addon."}
+}

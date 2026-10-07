@@ -1,0 +1,80 @@
+diff --git a/src/components/MediaSearch.vue b/src/components/MediaSearch.vue
+index 99e932b..836a243 100644
+--- a/src/components/MediaSearch.vue
++++ b/src/components/MediaSearch.vue
+@@ -155,7 +155,7 @@ const emit = defineEmits<{
+   (e: "select", item: MediaItemTypeOrItemMapping): void;
+ }>();
+ 
+-const query = ref("");
++const query = defineModel<string>({ default: "" });
+ const selectedMediaTypes = ref<MediaType[]>(
+   props.defaultSelectedMediaTypes.filter((mediaType) =>
+     props.allowedMediaTypes.includes(mediaType),
+diff --git a/src/views/PartyGuestView.vue b/src/views/PartyGuestView.vue
+index 4800675..a5f0220 100644
+--- a/src/views/PartyGuestView.vue
++++ b/src/views/PartyGuestView.vue
+@@ -7,10 +7,30 @@
+          shows it below with the boost/request actions, picking an artist
+          drills into that artist's tracks -->
+     <div class="search-section">
+-      <MediaSearch
+-        :allowed-media-types="[MediaType.TRACK, MediaType.ARTIST]"
+-        :placeholder="$t('providers.party.guest_page.search_placeholder')"
++      <PartyAiSearch
++        :current-track="currentAiTrack"
+         @select="onSearchSelect"
++        @results="onAiResults"
++      />
++    </div>
++
++    <div v-if="aiTracks.length" class="results-section results-list">
++      <PartyResultItem
++        v-for="track in aiTracks"
++        :key="track.uri"
++        :item="track"
++        :boost-enabled="boostEnabled"
++        :add-queue-enabled="addQueueEnabled"
++        :rate-limiting-enabled="rateLimitingEnabled"
++        :boost-tokens="boostTokens"
++        :add-queue-tokens="addQueueTokens"
++        :boost-badge-color="boostBadgeColor"
++        :request-badge-color="requestBadgeColor"
++        :adding-items="addingItems"
++        :added-items="addedItems"
++        :queued-uris="queuedUris"
++        :is-expanded="true"
++        @add-to-queue="addToQueue"
+       />
+     </div>
+ 
+@@ -163,7 +183,7 @@
+ </template>
+ 
+ <script setup lang="ts">
+-import MediaSearch from "@/components/MediaSearch.vue";
++import PartyAiSearch from "@/components/party/PartyAiSearch.vue";
+ import PartyListenIn from "@/components/party/PartyListenIn.vue";
+ import PartyQueueSection from "@/components/party/PartyQueueSection.vue";
+ import PartyResultItem from "@/components/party/PartyResultItem.vue";
+@@ -251,8 +271,19 @@ const {
+ 
+ // a track picked from the search dropdown, offered with the queue actions
+ const pickedTrack = ref<Track | null>(null);
++const aiTracks = ref<Track[]>([]);
++const currentAiTrack = computed(() => {
++  const item = currentQueue.value?.current_item?.media_item;
++  return item?.media_type === MediaType.TRACK ? (item as Track) : null;
++});
++const onAiResults = (tracks: Track[]) => {
++  aiTracks.value = tracks;
++  pickedTrack.value = null;
++  clearArtistSelection();
++};
+ 
+ const onSearchSelect = (item: MediaItemTypeOrItemMapping) => {
++  aiTracks.value = [];
+   if (item.media_type === MediaType.ARTIST) {
+     pickedTrack.value = null;
+     selectArtist(item as Artist);

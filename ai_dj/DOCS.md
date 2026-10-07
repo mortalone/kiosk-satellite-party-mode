@@ -50,23 +50,21 @@ for add-on'ens `8101/tcp`. Udfyld `api_token` med en tilfældig adgangskode på 
 24 tegn. Den giver kun adgang til DJ-forespørgsler, resultater og køvalg for den
 konfigurerede gruppe. Lad porten være umappet, hvis ingress er tilstrækkelig.
 
-Opdatér **Party Mode til 0.1.9**. I Party-menuen → **AI DJ · opsæt adresse** indsættes:
+Opdatér **Party Mode til 0.1.11**. I Party-menuen → **AI DJ · opsæt adresse** indsættes:
 
 `http://192.168.0.18:8101/#token=DIT_API_TOKEN`
 
-Tryk **Gem og åbn AI DJ**. Derefter åbner **DJ**-knappen øverst den samme side.
-Aktivér **Gæste-QR · AI DJ i stedet for MA**, hvis Party-QR'en skal føre gæsterne til
-DJ'en. Det er et separat, frivilligt DJ-gæstelink; MA's eget gæstelink er fortsat
-standard. “Vis gæste-QR” skal også være aktiveret. QR'en deler DJ-adgangen til den
-faste gruppe, så skift tokenet for at tilbagekalde tidligere DJ-gæstelinks. Det
-følger ikke automatisk MA's “disable guest access”.
+Tryk **Gem og åbn AI DJ**. Forstørrelsesglasset samler nu **Søg**, **Similar** og **AI DJ** i samme panel og søgefelt. AI-resultater vises med coverbilleder og de sædvanlige valg af køplacering. Adressen vises kun i forbindelsesopsætningen.
+
+HA-switches **Search: Library**, **Search: Similarity**, **Search: AI DJ** og **Similar to current track** gemmer, hvilke muligheder der vises. Den eksisterende `Allow music search` er fortsat hovedtilladelsen.
+
+Gæste-QR'en fører nu altid til **MA's eksisterende Party-gæsteside** og følger MA Guest access. Den tidligere alternative AI DJ-QR er fjernet. AI-fanen findes endnu ikke i en almindelig MA-gæsteside; den kræver den tilpassede MA-integration under [ma_ai_dj](../ma_ai_dj/README.md).
+
+Tidligere direkte add-on-links med `#token=...` virker stadig. De er separate fra MA's Guest-switch; skift add-on-tokenet for at tilbagekalde dem.
 
 ## Similarity
 
-I Party-menuen: **Vis lignende-numre-knapper**. Søgeresultater får en **≈**-knap,
-som viser en liste med lignende numre og de sædvanlige køvalg. Menuen har også
-**≈ Lignende det aktuelle nummer**. MA kan bruge musiktjenesternes egne anbefalinger;
-Sonic Similarity er fallback til understøttede, analyserede biblioteksnumre.
+Vælg **Similar** under forstørrelsesglasset. **≈ Lignende det aktuelle nummer** bruger nummeret, der spiller nu. Med **Similar to current track** aktiveret får søgeresultater også en **≈**-knap. MA kan bruge musiktjenesternes anbefalinger; fritekstsøgning under Similar kræver Sonic Similarity og analyserede biblioteksnumre.
 
 ## Lovelace og API
 

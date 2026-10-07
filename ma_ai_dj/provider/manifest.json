@@ -1,0 +1,13 @@
+{
+  "type": "plugin",
+  "domain": "ai_dj",
+  "stage": "alpha",
+  "name": "Party AI DJ",
+  "description": "Find playable music from a mood or request using your existing AI DJ addon.",
+  "codeowners": ["@mortalone"],
+  "documentation": "https://github.com/mortalone/kiosk-satellite-party-mode/tree/main/ma_ai_dj",
+  "multi_instance": false,
+  "builtin": false,
+  "icon": "sparkles",
+  "requirements": []
+}

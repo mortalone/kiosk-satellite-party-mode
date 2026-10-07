@@ -134,7 +134,7 @@ final class PartyView extends FrameLayout {
         this.effect = next; this.queueVisible = queueVisible; requestFrame();
     }
     void setGuests(Bitmap qr, String caption, String status) {
-        if (guestQr != qr || !guestText.equals(caption)) { guestQr = qr; guestText = caption; dirtyQueue(); requestFrame(); }
+        if (guestQr != qr || !guestText.equals(caption) || !guestStatus.equals(status)) { guestQr = qr; guestText = caption; guestStatus = status; dirtyQueue(); requestFrame(); }
     }
     void acceptAudio(float[] bands, float[] wave, int fps, boolean demo) {
         effects.accept(bands, wave, fps, demo); if (playing) requestFrame();
@@ -198,6 +198,10 @@ final class PartyView extends FrameLayout {
                 areaTop = y + side + 44 * density;
                 areaHeight = getHeight() - areaTop;
             }
+        }
+        if (fullscreen && guestQr == null && !guestStatus.isEmpty()) {
+            line(canvas, guestStatus, 16 * density, 28 * density, getWidth() - 32 * density, 12 * sp, false, PartyUi.MUTED);
+            areaTop += 40 * density; areaHeight -= 40 * density;
         }
         if (model.tracks.isEmpty()) {
             line(canvas, message, areaLeft + 20 * density, areaTop + areaHeight / 2f, areaWidth - 40 * density,
