@@ -29,7 +29,7 @@ jobs:
           name: standalone-party-guest-preview
           path: dist/qa/party-guest-*.png
       - name: Build standalone container
-        run: docker build --build-arg BUILD_VERSION=0.2.2 --build-arg BUILD_ARCH=amd64 -t party-guest:test party_guest
+        run: docker build --build-arg BUILD_VERSION=0.2.3 --build-arg BUILD_ARCH=amd64 -t party-guest:test party_guest
       - name: Verify startup without any AI configuration
         run: |
           mkdir /tmp/guest-options

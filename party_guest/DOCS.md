@@ -24,7 +24,7 @@ Vælg **Guest QR destination → Party guest page**. Party Guest og Kiosk skal p
 
 ## Søgning og adgang
 
-- **Bibliotek:** titel og kunstner i dit MA-bibliotek. Ingen AI.
+- **Søg:** titel og kunstner i dit MA-bibliotek og tilsluttede musikkilder, fx Spotify. Ingen AI.
 - **Samme stil:** fritekst gennem Sonic Similarity, som kræver aktiveret free-text search og et analyseret bibliotek i MA. Lignende det aktuelle nummer bruger MA's anbefalinger.
 - **AI:** vises kun, hvis den valgfrie AI DJ-forbindelse er tilgængelig og tilladt.
 

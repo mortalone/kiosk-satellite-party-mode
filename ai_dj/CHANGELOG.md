@@ -1,3 +1,7 @@
+## 0.1.8
+
+- Include the library and connected catalogs in normal guest search; keep Similar restricted to Sonic Similarity.
+
 ## 0.1.7
 
 - Share the verified per-track guest recommendation API and permission handling with Party Guest 0.2.1; legacy embedded guest UI remains compatible.

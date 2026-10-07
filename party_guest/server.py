@@ -134,7 +134,7 @@ class Portal:
         policy = self.policy()
         config.update(queue=[{'id': item.get('queue_item_id'), 'name': (item.get('media_item') or {}).get('name', ''),
             'artists': (item.get('media_item') or {}).get('artists') or [], 'image': self.cover(item.get('media_item') or {}), 'current': item.get('queue_item_id') == (snapshot.get('current_item') or {}).get('queue_item_id')} for item in items],
-            queue_option=policy['queue_option'], queue_help=PLACEMENT_TEXT[policy['queue_option']], continuous=policy['continuous'])
+            playing=snapshot.get('state') == 'playing', queue_option=policy['queue_option'], queue_help=PLACEMENT_TEXT[policy['queue_option']], continuous=policy['continuous'])
         return config
 
     def queue_id(self):

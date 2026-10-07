@@ -15,7 +15,11 @@ class FixturePortal(Portal):
     def ma(self, command, args):
         if command == 'player_queues/get': return {'state': 'playing', 'current_index': 0, 'items': 2, 'current_item': {'queue_item_id': 'q0', 'media_item': self.tracks[0]}}
         if command == 'player_queues/items': return [{'queue_item_id': 'q'+str(i), 'media_item': t} for i,t in enumerate(self.tracks)]
-        if command == 'music/search': return {'tracks': self.tracks}
+        if command == 'music/search':
+            if args['search_query'].lower() == 'queen':
+                assert 'providers' not in args, 'Normal search must include streaming catalogs'
+                return {'tracks': [{'uri': 'spotify://track/queen-fixture', 'name': 'Bohemian Rhapsody', 'artists': [{'name': 'Queen'}]}]}
+            return {'tracks': self.tracks}
         if command == 'music/tracks/similar_tracks': return self.tracks
         if command == 'player_queues/play_media':
             assert args['queue_id'] == 'group' and args['option'] == self.policy()['queue_option']

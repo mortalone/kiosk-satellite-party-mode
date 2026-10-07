@@ -84,7 +84,8 @@ class Guests:
                 tracks = self.dj.ma('music/tracks/similar_tracks', {'item_id': parsed.path.lstrip('/'), 'provider_instance_id_or_domain': parsed.scheme, 'limit': 12, 'allow_lookup': True})
             else:
                 args = {'search_query': prompt, 'media_types': ['track'], 'limit': 12}
-                args['providers'] = ['sonic_similarity'] if mode == 'similar' else ['library']
+                if mode == 'similar':
+                    args['providers'] = ['sonic_similarity']
                 result = self.dj.ma('music/search', args)
                 tracks = (result or {}).get('tracks', [])
             result = {'id': secrets.token_urlsafe(16), 'state': 'ready', 'tracks': self.valid_tracks(tracks), 'progress': ''}

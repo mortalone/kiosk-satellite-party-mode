@@ -1,3 +1,10 @@
+## 0.2.3
+
+- Normal search includes the MA library and connected catalogs such as Spotify, instead of restricting results to saved library tracks. Rename the tab to Søg and explain its scope.
+- Animate small blue bars beside the playing track; stop on pause and respect reduced-motion preferences.
+- Bring new search results into view when finding similar music from a queue row far down the page.
+- Verify Queen catalog results and playback animation in mobile browser checks.
+
 ## 0.2.2
 
 - Let the queue scroll with the page, without a nested scroll area on phones or desktops.
