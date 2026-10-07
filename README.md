@@ -134,7 +134,7 @@ lyrics are displayed without simulated timing.
 
 Party Mode 0.1.11 brings Library, Similarity and AI DJ into one native search sheet under the magnifying glass, with a shared input, cover-art results and ordinary queue placement. The four saved HA switches are **Search: Library**, **Search: Similarity**, **Search: AI DJ** and **Similar to current track**. They use the runtime entity budget, not the 20 manifest settings. Allow music search remains the master permission.
 
-Configure the existing addon's address and token only in the settings menu. The separate DJ button and alternative AI-addon QR are retired. Guest QR always opens the existing MA Party guest page. A short explanation appears when its QR cannot be obtained.
+Configure the existing addon's address and token in the settings menu. The native search sheet replaces the separate DJ button. From 0.1.12, Guest QR destination selects MA's guest portal or the separate Party guest page described above. A short explanation appears when a usable QR cannot be obtained.
 
 **Keep the official Music Assistant release.** Party AI DJ is a separate HA add-on that uses MA's API; the Kiosk Party plugin can use it without replacing MA. The [native MA integration source](ma_ai_dj/README.md) is development code only. It cannot be installed as an external plugin in stock MA 2.10.5 and does not change its desktop or guest search. The replacement MA add-on has been withdrawn; no data migration is required for the supported companion approach.
 
