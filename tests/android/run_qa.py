@@ -19,7 +19,8 @@ for mode in ['main','qrlarge','qrsmall','search','placement','playlists','settin
  png=subprocess.check_output(['adb','exec-out','screencap','-p'])
  (out/f'{mode}.png').write_bytes(png)
  if mode in ['main','guestpage']:
-  qrpng=subprocess.check_output(['adb','exec-out','cat',f'/sdcard/Android/data/me.jxl.kiosk.partyqa/files/qr-{mode}.png'])
+  qrpng=subprocess.check_output(['adb','exec-out','run-as','me.jxl.kiosk.partyqa','cat',f'files/qr-{mode}.png'])
+  if not qrpng.startswith(b'\x89PNG'):raise RuntimeError(qrpng[:256])
   (out/f'{mode}-qr-bitmap.png').write_bytes(qrpng)
   expected=logs.split(f'QA_QR_URL {mode} ')[-1].splitlines()[0].strip()
   qr=Image.open(io.BytesIO(qrpng)).convert('RGBA')
