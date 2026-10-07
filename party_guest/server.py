@@ -115,7 +115,7 @@ class Portal:
 
     @staticmethod
     def cover(media):
-        for image in (media.get('metadata') or {}).get('images', []):
+        for image in ((media.get('metadata') or {}).get('images') or []):
             path = image.get('path', '') if isinstance(image, dict) else ''
             try:
                 parsed = urlsplit(path)
@@ -132,7 +132,7 @@ class Portal:
         items = self.ma('player_queues/items', {'queue_id': queue, 'offset': max(0, int(snapshot.get('current_index') or 0) - 1), 'limit': 50}) or []
         policy = self.policy()
         config.update(queue=[{'id': item.get('queue_item_id'), 'name': (item.get('media_item') or {}).get('name', ''),
-            'artists': (item.get('media_item') or {}).get('artists', []), 'image': self.cover(item.get('media_item') or {}), 'current': item.get('queue_item_id') == (snapshot.get('current_item') or {}).get('queue_item_id')} for item in items],
+            'artists': (item.get('media_item') or {}).get('artists') or [], 'image': self.cover(item.get('media_item') or {}), 'current': item.get('queue_item_id') == (snapshot.get('current_item') or {}).get('queue_item_id')} for item in items],
             queue_option=policy['queue_option'], queue_help=PLACEMENT_TEXT[policy['queue_option']], continuous=policy['continuous'])
         return config
 

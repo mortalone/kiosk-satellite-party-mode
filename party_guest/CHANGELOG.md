@@ -1,3 +1,11 @@
+## 0.2.1
+
+- Fix guest startup with MA tracks whose metadata images/artist lists are null; missing artwork no longer hides search and queue.
+- Place Find similar buttons at the right of each search result and queue row; use that exact track, not always the playing track.
+- Keep per-track recommendations independent of the optional similarity text-search tab.
+- Resolve guest references from fresh queue item IDs or the guest's own verified jobs; do not accept arbitrary reference URIs.
+- Cover null metadata and row-reference/permission regressions in backend and browser checks.
+
 ## 0.2.0
 
 - Light MA-inspired guest layout with Bibliotek / Samme stil / AI, plain-language help and a live highlighted queue.

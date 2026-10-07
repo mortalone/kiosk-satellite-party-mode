@@ -51,7 +51,9 @@ final class PartyView extends FrameLayout {
     private final RectF progressRect = new RectF();
     private final List<RectF> hitRects = new ArrayList<>();
     private final List<String> hitIds = new ArrayList<>();
-    private Consumer<String> trackAction;
+    private Consumer<String> trackAction, similarAction;
+    private final List<RectF> similarRects = new ArrayList<>();
+    private final List<String> similarUris = new ArrayList<>();
     private float scrollOffset, maxScroll, touchY, lastTouchY;
     private boolean scrolling;
     private String currentId = "";
@@ -63,6 +65,7 @@ final class PartyView extends FrameLayout {
         postOnAnimationDelayed(redraw, delay);
     }
     void setTrackAction(Consumer<String> action) { trackAction = action; dirtyQueue(); requestFrame(); }
+    void setSimilarAction(Consumer<String> action) { similarAction = action; dirtyQueue(); requestFrame(); }
     @Override public boolean onTouchEvent(MotionEvent event) {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
@@ -75,6 +78,8 @@ final class PartyView extends FrameLayout {
                 }
                 lastTouchY = event.getY(); return true;
             case MotionEvent.ACTION_UP:
+                if (!scrolling && similarAction != null) for (int i = 0; i < similarRects.size(); i++)
+                    if (similarRects.get(i).contains(event.getX(), event.getY())) { performClick(); similarAction.accept(similarUris.get(i)); return true; }
                 if (!scrolling && trackAction != null) for (int i = 0; i < hitRects.size(); i++)
                     if (hitRects.get(i).contains(event.getX(), event.getY())) { performClick(); trackAction.accept(hitIds.get(i)); break; }
                 return true;
@@ -93,7 +98,7 @@ final class PartyView extends FrameLayout {
         setLayerType(View.LAYER_TYPE_NONE, null); // Use the host's hardware Canvas without a full-screen offscreen layer.
         queueCanvas = new View(context) {
             @Override protected void onDraw(Canvas canvas) {
-                progressRect.setEmpty(); hitRects.clear(); hitIds.clear(); drawQueue(canvas); progressCanvas.invalidate();
+                progressRect.setEmpty(); hitRects.clear(); hitIds.clear(); similarRects.clear(); similarUris.clear(); drawQueue(canvas); progressCanvas.invalidate();
             }
         };
         progressCanvas = new View(context) {
@@ -166,7 +171,7 @@ final class PartyView extends FrameLayout {
         if (a.tracks.size() != b.tracks.size()) return false;
         for (int i = 0; i < a.tracks.size(); i++) {
             PartyQueueModel.Track x = a.tracks.get(i), y = b.tracks.get(i);
-            if (!x.id.equals(y.id) || !x.title.equals(y.title) || !x.artist.equals(y.artist) || !x.artwork.equals(y.artwork) || x.current != y.current) return false;
+            if (!x.id.equals(y.id) || !x.uri.equals(y.uri) || !x.title.equals(y.title) || !x.artist.equals(y.artist) || !x.artwork.equals(y.artwork) || x.current != y.current) return false;
         }
         return true;
     }
@@ -263,7 +268,17 @@ final class PartyView extends FrameLayout {
                 paint.setAlpha(255); canvas.restoreToCount(save);
             }
             float tx = coverX + coverSize + 10 * density;
-            float textWidth = Math.max(1, x + cardWidth - tx - 12 * density);
+            boolean canSimilar = fullscreen && similarAction != null && track.uri.contains("://track/");
+            float actionWidth = canSimilar ? 54 * density : 0;
+            if (canSimilar) {
+                float cx = x + cardWidth - 27 * density, cy = y + height / 2;
+                similarRects.add(new RectF(cx - 24 * density, Math.max(areaTop, y), cx + 24 * density, Math.min(areaTop + areaHeight, y + height)));
+                similarUris.add(track.uri);
+                paint.setColor(0xFF344B58); canvas.drawCircle(cx, cy, 20 * density, paint);
+                text.setTypeface(Typeface.DEFAULT); text.setTextSize(27 * sp); text.setColor(0xFF91DAEE);
+                canvas.drawText("≈", cx - text.measureText("≈") / 2, cy - (text.ascent() + text.descent()) / 2, text);
+            }
+            float textWidth = Math.max(1, x + cardWidth - tx - 12 * density - actionWidth);
             float titleSize = (active ? fullscreen ? 28 : 19 : fullscreen ? 18 : 13.5f) * sp;
             float titleY = active ? y + height * 0.40f : y + height * 0.66f;
             line(canvas, track.title, tx, titleY, textWidth, titleSize, active,

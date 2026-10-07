@@ -431,9 +431,9 @@ public final class PartyModePlugin implements KioskPlugin {
         if (!modes.equals(reportedSearchModes)) {
             try {
                 host.publishSwitch("search_library", "Search: Library", searchLibrary);
-                host.publishSwitch("search_similar", "Search: Similarity", searchSimilar);
+                host.publishSwitch("search_similar", "Search: Similarity text", searchSimilar);
                 host.publishSwitch("search_ai", "Search: AI DJ", searchAi);
-                host.publishSwitch("current_similar", "Similar to current track", currentSimilar);
+                host.publishSwitch("current_similar", "Find similar by track", currentSimilar);
                 reportedSearchModes = modes;
             } catch (Throwable error) { host.log("Search switches unavailable"); }
         }
@@ -473,6 +473,7 @@ public final class PartyModePlugin implements KioskPlugin {
         });
         partyView = new PartyView(activity, true); partyView.setEconomy(settingFpsEconomy); partyView.setPresentation(partyEffect, partyQueueVisible);
         partyView.setTrackAction(allowQueueTap ? this::playQueueTrack : null);
+        partyView.setSimilarAction(allowSearch && currentSimilar ? this::showSimilar : null);
         FrameLayout.LayoutParams body = new FrameLayout.LayoutParams(-1, -1);
         body.topMargin = "Hidden".equals(screenControls) && !allowSearch && !showPlaylists ? 0 : dp(70);
         body.bottomMargin = dp((showPlayback ? 60 : 0) + (showVolume ? 60 : 0));
@@ -780,7 +781,7 @@ public final class PartyModePlugin implements KioskPlugin {
         });
     }
     private void showSimilar(String uri) {
-        Activity a = activeKioskActivity(); if (a == null || io == null || !allowSearch || !searchSimilar) return;
+        Activity a = activeKioskActivity(); if (a == null || io == null || !allowSearch || !currentSimilar) return;
         final String queue = activeQueue(), base = maBase(), token = maToken; final long generation = partyGeneration;
         LinearLayout body = panelBody(a); ScrollView scroll = new ScrollView(a); LinearLayout rows = panelBody(a); scroll.addView(rows);
         body.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1)); TextView status = PartyUi.text(a, "Finder lignende numre…", 16, PartyUi.MUTED); rows.addView(status);
@@ -821,9 +822,6 @@ public final class PartyModePlugin implements KioskPlugin {
         layout.addView(pills, new LinearLayout.LayoutParams(-1, dp(48)));
         TextView explanation = PartyUi.text(activity, "", 14, PartyUi.MUTED);
         LinearLayout.LayoutParams ep = new LinearLayout.LayoutParams(-1, -2); ep.topMargin = dp(8); ep.bottomMargin = dp(10); layout.addView(explanation, ep);
-        TextView current = PartyUi.action(activity, "≈ Lignende det aktuelle nummer", false);
-        layout.addView(current, new LinearLayout.LayoutParams(-1, dp(48)));
-        current.setOnClickListener(v -> { if (partyTrackMedia != null) showSimilar(partyTrackMedia.optString("uri", "")); });
         ScrollView scroll = new ScrollView(activity); scroll.setVerticalScrollBarEnabled(false);
         LinearLayout results = panelBody(activity); scroll.addView(results); layout.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         TextView status = PartyUi.text(activity, "Find et nummer til jukeboxen", 15, PartyUi.MUTED); results.addView(status);
@@ -833,7 +831,6 @@ public final class PartyModePlugin implements KioskPlugin {
             boolean similar = "similar".equals(selectedMode[0]), ai = "ai".equals(selectedMode[0]);
             input.setHint(ai ? "Fx rolig jazz med saxofon" : similar ? "Fx calm jazz with saxophone" : "Titel eller kunstner");
             explanation.setText(ai ? "Beskriv dit musikønske. AI finder forslag, som matches i dine musikkilder." : similar ? "Find lydmæssigt lignende musik i dit analyserede bibliotek. Eller brug nummeret, der spiller nu." : "Find et bestemt nummer eller en kunstner i dine Music Assistant-kilder.");
-            current.setVisibility(similar && currentSimilar && partyTrackMedia != null ? View.VISIBLE : View.GONE);
             for (int i = 0; i < 3; i++) if (tabs[i] != null) tabs[i].setBackground(PartyUi.shape(activity, ids[i].equals(selectedMode[0]) ? 0xFF25665A : 0xFF222C38, 22, true));
         };
         for (int i = 0; i < 3; i++) if (enabled[i]) {
@@ -946,7 +943,7 @@ public final class PartyModePlugin implements KioskPlugin {
         TextView name = PartyUi.text(a, media.track.title, 16, PartyUi.INK); name.setTypeface(Typeface.DEFAULT_BOLD); name.setMaxLines(2); name.setEllipsize(android.text.TextUtils.TruncateAt.END); labels.addView(name);
         if (!media.track.artist.isEmpty()) { TextView artist = PartyUi.text(a, media.track.artist, 13, PartyUi.MUTED); artist.setSingleLine(true); artist.setEllipsize(android.text.TextUtils.TruncateAt.END); labels.addView(artist); }
         row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1));
-        if (media.uri.contains("://track/") && searchSimilar && currentSimilar) {
+        if (media.uri.contains("://track/") && allowSearch && currentSimilar) {
             TextView similar = PartyUi.action(a, "≈", false); similar.setContentDescription("Find numre som " + media.track.title);
             row.addView(similar, new LinearLayout.LayoutParams(dp(44), dp(44)));
             similar.setOnClickListener(v -> { if (validPanel(queue, generation, request)) showSimilar(media.uri); });

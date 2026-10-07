@@ -10,7 +10,7 @@ class FixturePortal(Portal):
     def __init__(self):
         super().__init__({'queue_id': 'group', 'api_token': 'browser-fixture-host-secret-123', 'public_url': 'http://127.0.0.1:18102'})
         self.added = []
-        self.tracks = [{'uri': 'library://track/1', 'name': 'Aftenlys', 'artists': [{'name': 'Natteholdet'}]},
+        self.tracks = [{'uri': 'library://track/1', 'name': 'Aftenlys', 'metadata': {'images': None}, 'artists': [{'name': 'Natteholdet'}]},
                        {'uri': 'library://track/2', 'name': 'Stjernestøv', 'artists': [{'name': 'Natteholdet'}]}]
     def ma(self, command, args):
         if command == 'player_queues/get': return {'state': 'playing', 'current_index': 0, 'items': 2, 'current_item': {'queue_item_id': 'q0', 'media_item': self.tracks[0]}}

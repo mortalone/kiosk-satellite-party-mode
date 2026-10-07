@@ -9,10 +9,13 @@ import java.util.List;
 
 final class PartyQueueModel {
     static final class Track {
-        final String id, title, artist, artwork;
+        final String id, title, artist, artwork, uri;
         final boolean current;
         Track(String id, String title, String artist, String artwork, boolean current) {
-            this.id = id; this.title = title; this.artist = artist;
+            this(id, title, artist, artwork, current, "");
+        }
+        Track(String id, String title, String artist, String artwork, boolean current, String uri) {
+            this.uri = uri; this.id = id; this.title = title; this.artist = artist;
             this.artwork = artwork; this.current = current;
         }
     }
@@ -95,7 +98,7 @@ final class PartyQueueModel {
                     (path.startsWith("https://") || path.startsWith("http://"))) artwork = path;
             else if (!proxy.isEmpty()) artwork = base + "/imageproxy/" + proxy + "?size=256&fmt=jpg";
         }
-        return new Track(text(item, "queue_item_id"), title.isEmpty() ? "Ukendt titel" : title, artist, artwork, current);
+        return new Track(text(item, "queue_item_id"), title.isEmpty() ? "Ukendt titel" : title, artist, artwork, current, text(media, "uri").isEmpty() ? text(item, "uri") : text(media, "uri"));
     }
 
     private static String text(JSONObject object, String key) {

@@ -1,3 +1,7 @@
+## 0.1.7
+
+- Share the verified per-track guest recommendation API and permission handling with Party Guest 0.2.1; legacy embedded guest UI remains compatible.
+
 ## 0.1.6
 
 - Party Guest owns guest placement and automatic continuation. Remove legacy continuous controls from AI ingress; retain backend compatibility for existing automations.

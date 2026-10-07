@@ -15,6 +15,7 @@ public final class PartyQueueModelTest {
         check(model.tracks.size() == 5, "bounded five-track window");
         check(model.tracks.get(2).current, "current item by queue item id");
         check(!model.tracks.get(1).current, "history not current");
+        check(model.tracks.get(2).uri.equals("library://track/4"), "track URI for recommendations");
         check(model.tracks.get(2).title.equals("Track 4"), "media title");
         check(model.tracks.get(2).artist.equals("Artist"), "artist parsing");
         check(model.tracks.get(2).artwork.equals("http://ma.test/imageproxy/image4?size=256&fmt=jpg"), "private proxy artwork");
@@ -35,7 +36,7 @@ public final class PartyQueueModelTest {
 
     private static JSONObject item(int index) throws Exception {
         return new JSONObject().put("queue_item_id", "id" + index).put("duration", 180)
-                .put("media_item", new JSONObject().put("name", "Track " + index)
+                .put("media_item", new JSONObject().put("name", "Track " + index).put("uri", "library://track/" + index)
                         .put("artists", new JSONArray().put(new JSONObject().put("name", "Artist"))))
                 .put("image", new JSONObject().put("proxy_id", "image" + index));
     }

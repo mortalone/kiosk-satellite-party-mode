@@ -39,6 +39,10 @@ Installer Party AI DJ separat og konfigurér dens AI-model. I Party Guest angive
 
 Party Guest bruger kun AI DJ til at hente forslag og resultater. Tilføjelse til køen sker gennem Party Guest's egen, begrænsede gæsteadgang. Hvis AI DJ stoppes eller fjernes, fortsætter Søg og Similar; AI-fanen skjules ved næste konfigurationsopdatering. Ingen AI Task eller AI-nøgle kræves i Party Guest.
 
+## Lignende ud fra et nummer
+
+Knappen **≈** til højre ved hvert søgeresultat og nummer i køen finder musik, der ligner netop dét nummer. `search_current_similar_entity` styrer disse knapper; `search_similar_entity` styrer kun tekstfeltet under Samme stil. Du kan altså have knapperne slået til og tekstsøgningen slået fra. Manglende coverbilleder vises med et musikikon.
+
 ## Kø og automatisk fortsættelse
 
 Party Guest 0.2.0 ingress samler **Gæsternes musikønsker → Placering i køen** og **Automatisk fortsættelse**. Gæstesidens tekst følger den aktuelle placering. Disse indstillinger er uafhængige af AI DJ ingress' køvalg til manuelle AI-forslag.

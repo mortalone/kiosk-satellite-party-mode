@@ -173,7 +173,7 @@ class Continuation:
     @staticmethod
     def exclusion(track):
         return {'uri': track.get('uri', ''), 'title': track.get('name', ''),
-                'artist': ', '.join(a.get('name', '') for a in track.get('artists', []))}
+                'artist': ', '.join(a.get('name', '') for a in (track.get('artists') or []))}
 
     def run(self):
         while True:

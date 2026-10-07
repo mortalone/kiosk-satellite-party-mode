@@ -1,4 +1,4 @@
-> Nyeste: **Party Mode 0.1.14**, **Party Guest 0.2.0**, **Party AI DJ 0.1.6**. Party Guest har en lys gæsteside med Bibliotek / Samme stil / AI og styrer nu køplacering og automatisk fortsættelse. Se [Party Guest-opsætning](party_guest/DOCS.md).
+> Nyeste: **Party Mode 0.1.14**, **Party Guest 0.2.1**, **Party AI DJ 0.1.7**. Party Guest har en lys gæsteside med Bibliotek / Samme stil / AI og styrer nu køplacering og automatisk fortsættelse. Se [Party Guest-opsætning](party_guest/DOCS.md).
 
 # Party Mode for Kiosk Satellite
 
@@ -30,7 +30,7 @@ Guest-enable/disable actions write only `enable_guest_access` on the single enab
 
 ### Independent Party guest page (0.1.14)
 
-Install **[Party Guest 0.2.0](party_guest/DOCS.md)** from this HA add-on repository. It has its own Music Assistant connection, queue and ingress. **Party AI DJ is optional.** Browsers can open `http://YOUR_HA_IP:8102/guest/` directly; ingress includes an Open guest page link. Bibliotek and Samme stil work without AI DJ or Kiosk running.
+Install **[Party Guest 0.2.1](party_guest/DOCS.md)** from this HA add-on repository. It has its own Music Assistant connection, queue and ingress. **Party AI DJ is optional.** Browsers can open `http://YOUR_HA_IP:8102/guest/` directly; ingress includes an Open guest page link. Bibliotek and Samme stil work without AI DJ or Kiosk running.
 
 For Kiosk QR, update Party Mode to **0.1.14**, set Party Guest's `api_token` (at least 24 characters), and copy its **Forbind Kiosk Party** address from ingress into **Gæster → Party Guest · opsæt adresse**. Select **Guest QR destination → Party guest page**. Both connections must refer to the same MA queue. The existing AI DJ guest URL remains a compatibility fallback until the independent guest connection is saved.
 

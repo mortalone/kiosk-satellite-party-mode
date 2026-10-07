@@ -1,3 +1,11 @@
+## Party Guest 0.2.1 · AI DJ 0.1.7 · pending Party Mode 0.1.14
+
+- Fix the real-MA guest boot crash caused by null metadata images. Missing artist lists and artwork are handled safely.
+- Put a per-track recommendation button on the right of queue and result rows in Party Guest and the Kiosk queue. Each button uses its own row's track.
+- Keep per-track recommendations independently controlled from similarity text search, including on Kiosk.
+- Guest reference requests resolve fresh queue item IDs or the guest's own verified result/index; arbitrary URIs and foreign/expired rows are rejected.
+- Pending 0.1.14 includes these native changes; the earlier uncompleted 0.1.14 build was never released.
+
 ## Party Mode 0.1.14 · Party Guest 0.2.0 · AI DJ 0.1.6
 
 - Give the independent guest page a light MA-inspired layout, cyan search pills, cover art and a live queue with the current track highlighted. Bibliotek is ordinary search without AI; Samme stil and optional AI have plain-language explanations.

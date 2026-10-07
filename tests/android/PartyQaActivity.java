@@ -84,6 +84,7 @@ public final class PartyQaActivity extends Activity {
                     if ("switch".equals(mode) && !publishedPartyState) throw new AssertionError("HA switch did not report Party active");
                     if (view == null) throw new AssertionError("Party root missing");
                     if ("main".equals(mode) && (!switches.containsKey("search_ai") || !switches.containsKey("search_similar") || !switches.containsKey("search_library") || !switches.containsKey("current_similar"))) throw new AssertionError("search switches absent");
+                    if ("main".equals(mode)) { try { Field buttons=PartyView.class.getDeclaredField("similarRects"); buttons.setAccessible(true); if (((java.util.List<?>)buttons.get(view)).isEmpty()) throw new AssertionError("queue similarity buttons absent"); } catch (ReflectiveOperationException e) { throw new RuntimeException(e); } }
                     if ("main".equals(mode) && field("partyQr") == null) throw new AssertionError("MA guest QR absent");
                     if ("main".equals(mode) && hasDescription(getWindow().getDecorView(), "Afslut Party Mode")) throw new AssertionError("default Close visible");
                     if ("settings".equals(mode) && !hasText(((Dialog)field("searchDialog")).getWindow().getDecorView(), "VISUALISERING")) throw new AssertionError("new menu missing");

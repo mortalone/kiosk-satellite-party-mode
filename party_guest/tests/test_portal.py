@@ -67,6 +67,46 @@ class PortalTest(unittest.TestCase):
             request.assert_called_once_with('POST', 'http://dj:8101/api/suggest', headers={'Authorization': 'Bearer ' + self.portal.options['ai_dj_token']}, json={'prompt': 'Jazz', 'count': 8}, timeout=(2, 5))
         with self.assertRaises(ValueError): self.portal.job('../admin/ai')
 
+    def test_ma_null_cover_and_missing_metadata_do_not_break_guest_boot(self):
+        self.track.update(metadata={'images': None}, artists=None)
+        item = {'queue_item_id': 'q7', 'media_item': self.track}
+        self.portal.ma.side_effect = lambda cmd,args: [item, {'queue_item_id': 'empty', 'media_item': None}] if cmd == 'player_queues/items' else {'current_item': item, 'current_index': 0}
+        config = self.portal.guest_config(self.token)
+        self.assertTrue(config['modes']['library'])
+        self.assertEqual(config['queue'][0]['image'], '')
+        self.assertEqual(config['queue'][0]['artists'], [])
+        self.assertTrue(config['queue'][0]['current'])
+        self.assertEqual(config['queue'][1]['name'], '')
+
+    def test_similar_buttons_use_only_queue_rows_or_owned_results(self):
+        original = {'uri': 'library://track/7', 'name': 'Jazz'}
+        match = {'uri': 'library://track/8', 'name': 'More Jazz'}
+        item = {'queue_item_id': 'q7', 'media_item': original}
+        def ma(cmd, args):
+            if cmd == 'player_queues/get': return {'current_item': item, 'current_index': 0}
+            if cmd == 'player_queues/items': return [item]
+            if cmd == 'music/search': return {'tracks': [original]}
+            if cmd == 'music/tracks/similar_tracks': return [match]
+            if cmd == 'player_queues/play_media': return None
+            raise AssertionError(cmd)
+        self.portal.ma = Mock(side_effect=ma)
+        result = self.portal.guests.search(self.token, {'mode': 'library', 'query': 'Jazz'})
+        session = self.portal.guests.session(self.token)
+        session['modes']['similar'] = False
+        session['last'] = -1000
+        linked = self.portal.guests.search(self.token, {'mode': 'track_similar', 'id': result['id'], 'index': 0})
+        self.portal.ma.assert_called_with('music/tracks/similar_tracks', {'item_id': '7', 'provider_instance_id_or_domain': 'library', 'limit': 12, 'allow_lookup': True})
+        self.portal.guests.enqueue(self.token, {'id': linked['id'], 'indices': [0]})
+        self.portal.ma.assert_called_with('player_queues/play_media', {'queue_id': 'group', 'media': ['library://track/8'], 'option': 'add'})
+        session['last'] = -1000
+        self.portal.guests.search(self.token, {'mode': 'track_similar', 'queue_item_id': 'q7'})
+        for bad in [{'uri': 'spotify://track/arbitrary'}, {'queue_item_id': 'other-queue'}, {'id': 'another-guest', 'index': 0}, {'id': result['id'], 'index': True}, {'id': result['id'], 'index': -1}]:
+            session['last'] = -1000
+            with self.assertRaises(ValueError): self.portal.guests.search(self.token, {'mode': 'track_similar', **bad})
+        session['modes']['current_similar'] = False
+        session['last'] = -1000
+        with self.assertRaises(ValueError): self.portal.guests.search(self.token, {'mode': 'track_similar', 'queue_item_id': 'q7'})
+
     def test_direct_http_url_and_host_isolation(self):
         server = ThreadingHTTPServer(('127.0.0.1', 0), handler(self.portal))
         threading.Thread(target=server.serve_forever, daemon=True).start()

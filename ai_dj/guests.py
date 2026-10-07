@@ -58,10 +58,11 @@ class Guests:
     def search(self, token, data):
         session = self.session(token)
         mode = data.get('mode')
-        if mode not in ('library', 'similar', 'ai', 'current_similar') or not self.modes(session).get(mode):
+        permission = 'current_similar' if mode == 'track_similar' else mode
+        if mode not in ('library', 'similar', 'ai', 'current_similar', 'track_similar') or not self.modes(session).get(permission):
             raise ValueError('Denne søgemåde er slået fra i Home Assistant')
         prompt = data.get('query', '')
-        if mode != 'current_similar' and (not isinstance(prompt, str) or not 1 <= len(prompt.strip()) <= 1000):
+        if mode not in ('current_similar', 'track_similar') and (not isinstance(prompt, str) or not 1 <= len(prompt.strip()) <= 1000):
             raise ValueError('Skriv et musikønske eller en titel')
         now = time.monotonic()
         with self.lock:
@@ -75,8 +76,8 @@ class Guests:
         if mode == 'ai':
             result = self.dj.suggest({'prompt': prompt, 'count': 8})
         else:
-            if mode == 'current_similar':
-                uri = self.config(token)['current']['uri']
+            if mode in ('current_similar', 'track_similar'):
+                uri = self.config(token)['current']['uri'] if mode == 'current_similar' else self.reference(token, session, data)
                 parsed = urlsplit(uri)
                 if not parsed.scheme or parsed.netloc != 'track' or not parsed.path:
                     raise ValueError('Der er ikke et aktuelt nummer at finde lignende musik til')
@@ -90,6 +91,28 @@ class Guests:
         with self.lock:
             session['jobs'][result['id']] = {'created': now, 'added': set(), 'mode': mode, 'result': result if mode != 'ai' else None}
         return {'id': result['id']}
+
+    def reference(self, token, session, data):
+        # Accept only a row from this queue or this guest's verified search job.
+        if 'queue_item_id' in data:
+            item_id = data['queue_item_id']
+            if not isinstance(item_id, str) or not item_id:
+                raise ValueError('Vælg et nummer i køen')
+            queue = self.dj.ma('player_queues/get', {'queue_id': session['queue']})
+            items = self.dj.ma('player_queues/items', {'queue_id': session['queue'],
+                'offset': max(0, int(queue.get('current_index') or 0) - 1), 'limit': 50}) or []
+            track = next(((item.get('media_item') or {}) for item in items if item.get('queue_item_id') == item_id), None)
+            if track is None:
+                raise ValueError('Nummeret er ikke længere i den viste kø')
+        else:
+            result = self.job(token, data.get('id'))
+            index = data.get('index')
+            source_mode = session['jobs'][result['id']]['mode']
+            source_permission = 'current_similar' if source_mode == 'track_similar' else source_mode
+            if not self.modes(session).get(source_permission) or result['state'] != 'ready' or isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < len(result['tracks']):
+                raise ValueError('Vælg et nummer fra dine søgeresultater')
+            track = result['tracks'][index]
+        return track.get('uri', '')
 
     @staticmethod
     def valid_tracks(tracks):
@@ -110,7 +133,7 @@ class Guests:
         with self.dj.queue_lock:
             session = self.session(token)
             result = self.job(token, data.get('id'))
-            if not self.modes(session).get(session['jobs'][result['id']]['mode']):
+            if not self.modes(session).get('current_similar' if session['jobs'][result['id']]['mode'] == 'track_similar' else session['jobs'][result['id']]['mode']):
                 raise ValueError('Denne søgemåde er slået fra i Home Assistant')
             indices = data.get('indices')
             if result['state'] != 'ready' or not isinstance(indices, list) or not indices or len(indices) > 12 or len(set(indices)) != len(indices):
