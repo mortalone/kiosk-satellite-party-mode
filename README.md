@@ -122,7 +122,7 @@ Party Mode 0.1.11 brings Library, Similarity and AI DJ into one native search sh
 
 Configure the existing addon's address and token only in the settings menu. The separate DJ button and alternative AI-addon QR are retired. Guest QR always opens the existing MA Party guest page. A short explanation appears when its QR cannot be obtained.
 
-[MA AI DJ integration source](ma_ai_dj/README.md) adds the AI backend bridge and search controls to that same MA guest page. It is experimental source for a customized MA build, not a plugin that stock MA can install from this HA repository.
+[Music Assistant 2.10.5 with Party AI DJ](ma_ai_dj/README.md) is an experimental replacement HA add-on with AI search in that same guest page and a search dialog in desktop Party mode. Import the stopped existing MA server’s data before starting it; retain the original add-on and backup. It is not injected into stock MA by updating this repository. The separate Party AI DJ engine must be updated to 0.1.3.
 
 ## 0.1.10: Guest switches for Home Assistant
 

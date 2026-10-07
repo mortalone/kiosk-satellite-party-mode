@@ -13,6 +13,22 @@ from dj import DJ, candidates_from, match_track, handler
 
 def track(artist,title,uri='library://track/1',**kwargs):return {'name':title,'uri':uri,'artists':[{'name':artist}],**kwargs}
 class TestDJ(unittest.TestCase):
+    def test_ha_search_switches_and_unavailable_states(self):
+        dj = DJ({'search_library_entity': 'switch.library', 'search_similar_entity': 'input_boolean.similar', 'search_ai_entity': 'switch.ai'})
+        self.addCleanup(dj.worker.shutdown)
+        states = {'states/switch.library': {'state': 'off'}, 'states/input_boolean.similar': {'state': 'on'}, 'states/switch.ai': {'state': 'unavailable'}}
+        dj.ha_get = Mock(side_effect=lambda path: states[path])
+        self.assertEqual(dj.search_config(), {'library': False, 'similar': True, 'ai': False})
+        dj.ha_get = Mock(side_effect=requests.ConnectionError())
+        self.assertEqual(dj.search_config(), {'library': False, 'similar': False, 'ai': False})
+    def test_search_defaults_and_invalid_entity(self):
+        dj = DJ({})
+        self.addCleanup(dj.worker.shutdown)
+        self.assertEqual(dj.search_config(), {'library': True, 'similar': True, 'ai': True})
+        dj.options['search_ai_entity'] = '../../other'
+        dj.ha_get = Mock()
+        self.assertFalse(dj.search_config()['ai'])
+        dj.ha_get.assert_not_called()
     def test_matching_does_not_accept_wrong_artist_live_or_missing(self):
         c={'artist':'Queen','title':'We Will Rock You'}
         self.assertIsNone(match_track(c,[track('Other','We Will Rock You')]))

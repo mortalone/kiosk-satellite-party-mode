@@ -24,7 +24,6 @@ from music_assistant.controllers.webserver.helpers.auth_middleware import (
     get_current_token,
     get_current_user,
 )
-from music_assistant.helpers.provider_access import visible_playback_sources
 from music_assistant.models.plugin import PluginProvider
 
 from .bridge import DjBridge
@@ -93,13 +92,19 @@ class PartyAiDj(PluginProvider):
         """Report whether this session may use AI, without exposing credentials."""
         try:
             await self._session()
+            flags = await self._request("/api/search-config", None)
         except InvalidDataError:
-            return {"enabled": False}
-        return {"enabled": True}
+            return {"enabled": False, "library": True, "similar": True, "ai": False}
+        return {
+            "enabled": True,
+            **{key: flags.get(key) is True for key in ("library", "similar", "ai")},
+        }
 
     async def suggest(self, prompt: str, count: int = 8) -> dict[str, Any]:
         """Create an AI request from the current authenticated Party session."""
         owner, queue = await self._session()
+        if not (await self.dj_config()).get("ai"):
+            raise InvalidDataError("AI DJ search is disabled in Home Assistant")
         try:
             return await self._bridge.suggest(owner, queue, prompt, count)
         except ValueError as error:
@@ -114,7 +119,7 @@ class PartyAiDj(PluginProvider):
             raise InvalidDataError(str(error)) from error
         if result.get("state") != "ready":
             return result
-        visible = visible_playback_sources(self.mass, get_current_user())
+        visible = set(self.mass.music.get_active_provider_instances())
         tracks = []
         for raw in result.get("tracks", [])[:12]:
             try:
@@ -123,7 +128,7 @@ class PartyAiDj(PluginProvider):
                 )
                 if not isinstance(track, Track) or not track.available:
                     continue
-                if visible is not None and not any(
+                if not any(
                     mapping.provider_instance in visible and mapping.available
                     for mapping in track.provider_mappings
                 ):

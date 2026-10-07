@@ -1,5 +1,8 @@
 <template>
   <div class="space-y-3">
+    <p v-if="!tabs.length" role="status">
+      Music search is disabled in Home Assistant.
+    </p>
     <div class="flex gap-2" role="tablist" aria-label="Music search mode">
       <Button
         v-for="tab in tabs"
@@ -13,13 +16,13 @@
     </div>
     <p class="text-sm text-muted-foreground">{{ help }}</p>
     <MediaSearch
-      v-if="mode === 'search'"
+      v-if="mode === 'search' && libraryEnabled"
       v-model="query"
       :allowed-media-types="[MediaType.TRACK, MediaType.ARTIST]"
       :placeholder="$t('providers.party.guest_page.search_placeholder')"
       @select="emit('select', $event)"
     />
-    <form v-else class="flex gap-2" @submit.prevent="search">
+    <form v-else-if="tabs.length" class="flex gap-2" @submit.prevent="search">
       <SearchInput
         v-model="query"
         class="flex-1"
@@ -35,7 +38,7 @@
       }}</Button>
     </form>
     <Button
-      v-if="mode === 'similar' && currentTrack"
+      v-if="similarEnabled && currentTrack"
       variant="outline"
       :disabled="busy"
       @click="similarToCurrent"
@@ -70,13 +73,21 @@ type Mode = "search" | "similar" | "ai";
 const mode = ref<Mode>("search"),
   query = ref(""),
   aiEnabled = ref(false),
+  libraryEnabled = ref(true),
+  similarEnabled = ref(true),
   busy = ref(false),
   status = ref("");
 let revision = 0,
   timer: ReturnType<typeof setTimeout> | undefined;
+let configTimer: ReturnType<typeof setInterval> | undefined;
+let disposed = false;
 const tabs = computed(() => [
-  { id: "search" as Mode, label: $t("search") },
-  { id: "similar" as Mode, label: "Similar" },
+  ...(libraryEnabled.value
+    ? [{ id: "search" as Mode, label: $t("search") }]
+    : []),
+  ...(similarEnabled.value
+    ? [{ id: "similar" as Mode, label: "Similar" }]
+    : []),
   ...(aiEnabled.value ? [{ id: "ai" as Mode, label: "AI DJ" }] : []),
 ]);
 const help = computed(() =>
@@ -189,15 +200,33 @@ async function similarToCurrent() {
     failed(error, run);
   }
 }
-onMounted(async () => {
+async function refreshConfig() {
   try {
-    const config = await api.sendCommand<{ enabled: boolean }>("ai_dj/config");
-    aiEnabled.value = config.enabled;
+    const config = await api.sendCommand<{
+      enabled: boolean;
+      library: boolean;
+      similar: boolean;
+      ai: boolean;
+    }>("ai_dj/config");
+    if (disposed) return;
+    libraryEnabled.value = config.library;
+    similarEnabled.value = config.similar;
+    aiEnabled.value = config.enabled && config.ai;
   } catch {
+    if (disposed) return;
     aiEnabled.value = false;
   }
+  if (!tabs.value.some((tab) => tab.id === mode.value)) {
+    changeMode(tabs.value[0]?.id || "search");
+  }
+}
+onMounted(() => {
+  void refreshConfig();
+  configTimer = setInterval(() => void refreshConfig(), 15000);
 });
 onBeforeUnmount(() => {
+  disposed = true;
+  clearInterval(configTimer);
   revision++;
   clearTimeout(timer);
 });

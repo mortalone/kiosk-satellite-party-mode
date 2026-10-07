@@ -102,6 +102,20 @@ class DJ:
                 entities.append({'entity_id':entity,'name':attrs.get('friendly_name',entity),'available':state.get('state')!='unavailable'})
         return {'engine':self.options.get('ai_engine','ha_task'),'selected':self.options.get('ai_task_entity',''),
                 'entities':sorted(entities,key=lambda e:(e['name'],e['entity_id']))}
+    def search_config(self):
+        result = {'library': True, 'similar': True, 'ai': True}
+        for mode in result:
+            entity = self.options.get('search_' + mode + '_entity', '')
+            if not entity:
+                continue
+            if not isinstance(entity, str) or not re.fullmatch(r'(?:switch|input_boolean)\.[a-z0-9_]+', entity):
+                result[mode] = False
+                continue
+            try:
+                result[mode] = self.ha_get('states/' + entity).get('state') == 'on'
+            except (requests.RequestException, ValueError, TypeError):
+                result[mode] = False
+        return result
     def select_ai(self,data):
         entity=data.get('entity_id','')
         if not isinstance(entity,str) or entity not in {e['entity_id'] for e in self.ai_choices()['entities'] if e['available']}:
@@ -242,6 +256,7 @@ def handler(dj, ingress=False):
                 if path.startswith('/api/admin/') and not ingress: return self.reply(403,{'error':'AI-opsætning åbnes fra HA ingress'})
                 if not post and path=='/api/admin/radio': return self.reply(200,dj.radio.status())
                 if not post and path=='/api/admin/ai': return self.reply(200,dj.ai_choices())
+                if not post and path=='/api/search-config': return self.reply(200,dj.search_config())
                 if not post and path.startswith('/api/jobs/'): return self.reply(200,dj.job(path.rsplit('/',1)[1]))
                 if not post: return self.reply(404,{'error':'Ukendt endpoint'})
                 size=int(self.headers.get('Content-Length','0'))

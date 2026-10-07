@@ -111,3 +111,7 @@ indsætte almindelige DJ-forslag; gæste-tokenet kan ikke starte en vedvarende D
 ændre AI-indstillinger. Host-API: `GET/POST /api/admin/radio`, POST med
 `{"action":"start","prompt":"varieret rolig jazz","option":"add"}` eller
 `{"action":"stop"}`. Et nyt musikønske kræver stop og start igen.
+
+## Native MA search switches (0.1.3)
+
+`search_library_entity`, `search_similar_entity` and `search_ai_entity` accept your existing HA `switch` or `input_boolean` entity IDs. Empty means enabled. Configured entities must be on; missing/unavailable entities disable that search mode. These settings are consumed by the native MA Party AI DJ bridge.

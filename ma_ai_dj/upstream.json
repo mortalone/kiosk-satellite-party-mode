@@ -1,4 +1,6 @@
 {
-  "server": "6137dc84b17d27c2e75d9db068aa4224ce3f8cde",
-  "frontend": "080438b97e7fbb31286122f589a2c4cd478b95c4"
+  "server": "452e23745588f01e734298e0a10e556fc140db45",
+  "frontend": "e779b9d359e47cd210c2801f16a0ce6263571903",
+  "server_version": "2.10.5",
+  "frontend_version": "2.17.297"
 }

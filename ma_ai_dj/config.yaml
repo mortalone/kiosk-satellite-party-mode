@@ -1,0 +1,39 @@
+name: Music Assistant 2.10.5 with Party AI DJ
+version: "2.10.5-dj.1"
+slug: music_assistant_ai_dj
+description: Music Assistant 2.10.5 with AI DJ in the existing Party desktop and guest pages
+url: https://github.com/mortalone/kiosk-satellite-party-mode/tree/main/ma_ai_dj
+arch: [amd64, aarch64]
+startup: application
+boot: manual
+init: false
+homeassistant_api: true
+hassio_api: true
+hassio_role: manager
+auth_api: true
+discovery: [music_assistant]
+host_network: true
+ingress: true
+ingress_port: 8094
+audio: true
+apparmor: true
+panel_icon: mdi:music-assistant
+panel_title: Music Assistant AI DJ
+panel_admin: false
+map: ["media:rw", "ssl:ro", "share:ro"]
+tmpfs: true
+stage: experimental
+privileged: [SYS_ADMIN, DAC_READ_SEARCH]
+options:
+  log_level: info
+  safe_mode: false
+  import_existing_data: false
+schema:
+  log_level: list(debug|info|warning|error)
+  safe_mode: bool
+  import_existing_data: bool
+backup_exclude:
+  - ma-data/cache.db
+  - ma-data/collage_images/*
+  - ma-data/.cache/*
+  - ma-data/library.db.backup

@@ -35,3 +35,18 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm exec vue-tsc --noEmit
           pnpm exec vite build
+      - name: Verify stable server API compatibility
+        run: python ma_ai_dj/check_contract.py --server /tmp/ma-server
+      - name: Build installable HA replacement
+        run: docker build -t ma-ai-dj:test ma_ai_dj
+      - name: Verify installed provider imports and startup guard
+        run: |
+          docker run --rm --entrypoint python ma-ai-dj:test -c 'from music_assistant.providers.ai_dj import PartyAiDj; from music_assistant_frontend import where; assert (where() / "index.html").is_file()'
+          mkdir /tmp/ma-dj-data
+          printf '%s\n' '{}' > /tmp/ma-dj-data/options.json
+          if docker run --rm -v /tmp/ma-dj-data:/data ma-ai-dj:test > /tmp/ma-dj-start.log 2>&1; then
+            cat /tmp/ma-dj-start.log
+            exit 1
+          fi
+          cat /tmp/ma-dj-start.log
+          grep -F 'Copy the stopped MA data' /tmp/ma-dj-start.log

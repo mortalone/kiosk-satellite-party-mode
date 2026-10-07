@@ -1,3 +1,6 @@
+## 0.1.3
+- Expose authenticated search mode configuration for the native MA bridge, controlled by existing HA switches or input booleans.
+
 # 0.1.2
 
 - Show queue placement before search: add, next, play now, replace upcoming, replace all. Replace all requires explicit confirmation.

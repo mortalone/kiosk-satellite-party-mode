@@ -1,5 +1,5 @@
 diff --git a/src/components/MediaSearch.vue b/src/components/MediaSearch.vue
-index 99e932b..836a243 100644
+index 223664dd..fba220a2 100644
 --- a/src/components/MediaSearch.vue
 +++ b/src/components/MediaSearch.vue
 @@ -155,7 +155,7 @@ const emit = defineEmits<{
@@ -11,11 +11,87 @@ index 99e932b..836a243 100644
  const selectedMediaTypes = ref<MediaType[]>(
    props.defaultSelectedMediaTypes.filter((mediaType) =>
      props.allowedMediaTypes.includes(mediaType),
+diff --git a/src/views/PartyDashboardView.vue b/src/views/PartyDashboardView.vue
+index 3002d67a..dc90c64c 100644
+--- a/src/views/PartyDashboardView.vue
++++ b/src/views/PartyDashboardView.vue
+@@ -80,6 +80,15 @@
+             </Badge>
+           </template>
+ 
++          <Button
++            variant="ghost-icon"
++            size="icon-sm"
++            aria-label="Search · Similar · AI DJ"
++            @click="showMusicSearch = true"
++          >
++            <Search :size="16" />
++          </Button>
++
+           <!-- Visualizer toggle; also available in fullscreen, where the
+                party screen normally runs -->
+           <Button
+@@ -286,6 +295,16 @@
+       <img :src="maLogoSrc" alt="Music Assistant" class="h-5 w-auto" />
+     </div>
+ 
++    <Dialog v-model:open="showMusicSearch">
++      <DialogScrollContent class="sm:max-w-[700px]">
++        <DialogHeader>
++          <DialogTitle>Search · Similar · AI DJ</DialogTitle>
++          <DialogDescription>Find music for the Party queue.</DialogDescription>
++        </DialogHeader>
++        <PartyGuestView v-if="showMusicSearch" search-only />
++      </DialogScrollContent>
++    </Dialog>
++
+     <!-- Guest Access Toggle Dialog -->
+     <AlertDialog v-model:open="showGuestAccessDialog">
+       <AlertDialogContent class="sm:max-w-[480px]">
+@@ -323,6 +342,14 @@
+ <script setup lang="ts">
+ import ShowDashboardButton from "@/components/ShowDashboardButton.vue";
+ import LyricsViewer from "@/components/LyricsViewer.vue";
++import PartyGuestView from "@/views/PartyGuestView.vue";
++import {
++  Dialog,
++  DialogScrollContent,
++  DialogHeader,
++  DialogTitle,
++  DialogDescription,
++} from "@/components/ui/dialog";
+ import PartyQR from "@/components/party/PartyQR.vue";
+ import VisualizerCanvas from "@/components/VisualizerCanvas.vue";
+ import PartyTrackCard from "@/components/party/PartyTrackCard.vue";
+@@ -357,6 +384,7 @@ import {
+ import { store } from "@/plugins/store";
+ import {
+   Droplet,
++  Search,
+   Maximize2,
+   Minimize2,
+   Music,
+@@ -403,6 +431,7 @@ const swapped = ref(false); // Current swap state for anti burn-in
+ let burnInInterval: ReturnType<typeof setInterval> | null = null;
+ const accessError = ref("");
+ const showGuestAccessDialog = ref(false);
++const showMusicSearch = ref(false);
+ const guestAccessSaving = ref(false);
+ 
+ const toggleGuestAccess = async () => {
 diff --git a/src/views/PartyGuestView.vue b/src/views/PartyGuestView.vue
-index 4800675..a5f0220 100644
+index 48006759..36a01dbb 100644
 --- a/src/views/PartyGuestView.vue
 +++ b/src/views/PartyGuestView.vue
-@@ -7,10 +7,30 @@
+@@ -1,16 +1,36 @@
+ <template>
+-  <div class="guest-view">
++  <div class="guest-view" :class="{ 'guest-search-only': searchOnly }">
+     <!-- Listen in (shared audio) -->
+-    <PartyListenIn />
++    <PartyListenIn v-if="!searchOnly" />
+ 
+     <!-- Search: same dropdown experience as the quiz setup; picking a track
           shows it below with the boost/request actions, picking an artist
           drills into that artist's tracks -->
      <div class="search-section">
@@ -49,6 +125,15 @@ index 4800675..a5f0220 100644
        />
      </div>
  
+@@ -138,7 +158,7 @@
+ 
+     <!-- Current Queue Section -->
+     <PartyQueueSection
+-      v-if="!selectedArtist"
++      v-if="!selectedArtist && !searchOnly"
+       ref="queueSectionRef"
+       :queue-items="queueItems"
+       :queue-fetch-offset="queueFetchOffset"
 @@ -163,7 +183,7 @@
  </template>
  
@@ -58,7 +143,16 @@ index 4800675..a5f0220 100644
  import PartyListenIn from "@/components/party/PartyListenIn.vue";
  import PartyQueueSection from "@/components/party/PartyQueueSection.vue";
  import PartyResultItem from "@/components/party/PartyResultItem.vue";
-@@ -251,8 +271,19 @@ const {
+@@ -197,6 +217,8 @@ import {
+ } from "vue";
+ import { toast } from "vue-sonner";
+ 
++defineProps<{ searchOnly?: boolean }>();
++
+ // --- Composables ---
+ const { config: partyConfig, fetchConfig } = usePartyConfig();
+ const rateLimit = useRateLimiting();
+@@ -251,8 +273,19 @@ const {
  
  // a track picked from the search dropdown, offered with the queue actions
  const pickedTrack = ref<Track | null>(null);
@@ -78,3 +172,22 @@ index 4800675..a5f0220 100644
    if (item.media_type === MediaType.ARTIST) {
      pickedTrack.value = null;
      selectArtist(item as Artist);
+@@ -559,6 +592,18 @@ onBeforeUnmount(() => {
+   box-sizing: border-box;
+ }
+ 
++.guest-search-only {
++  height: auto;
++  max-height: none;
++  overflow: visible;
++  padding: 0;
++}
++
++.guest-search-only .results-section {
++  flex: none;
++  max-height: 55vh;
++}
++
+ .section-header {
+   display: flex;
+   justify-content: space-between;
