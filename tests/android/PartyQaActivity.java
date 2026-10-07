@@ -37,6 +37,19 @@ public final class PartyQaActivity extends Activity {
                     if ("similar".equals(mode)) findText(dialog.getWindow().getDecorView(), "Similar").performClick();
                     EditText input = findEdit(dialog.getWindow().getDecorView()); input.setText("party"); input.onEditorAction(EditorInfo.IME_ACTION_SEARCH);
                     if ("placement".equals(mode)) main.postDelayed(() -> { Dialog d = (Dialog)field("searchDialog"); TextView t = findText(d.getWindow().getDecorView(), "Aftenlys"); if (t == null) throw new AssertionError("search results absent"); ((View)t.getParent().getParent()).performClick(); }, 700);
+                } else if ("trackbuttons".equals(mode)) {
+                    plugin.onEvent("switch.search_similar", Collections.singletonMap("on", false));
+                    main.postDelayed(() -> { try {
+                        PartyView view=(PartyView)field("partyView");
+                        Field rf=PartyView.class.getDeclaredField("similarRects"), uf=PartyView.class.getDeclaredField("similarUris");rf.setAccessible(true);uf.setAccessible(true);
+                        java.util.List<RectF> boxes=(java.util.List<RectF>)rf.get(view);java.util.List<String> uris=(java.util.List<String>)uf.get(view);
+                        int index=uris.indexOf("library://track/4");if(index<0)throw new AssertionError("current row button absent");
+                        RectF box=boxes.get(index);long at=SystemClock.uptimeMillis();
+                        MotionEvent down=MotionEvent.obtain(at,at,MotionEvent.ACTION_DOWN,box.centerX(),box.centerY(),0),up=MotionEvent.obtain(at,at+10,MotionEvent.ACTION_UP,box.centerX(),box.centerY(),0);
+                        view.onTouchEvent(down);view.onTouchEvent(up);down.recycle();up.recycle();
+                    } catch(Exception e) {throw new RuntimeException(e);} },400);
+                } else if ("trackbuttonsoff".equals(mode)) {
+                    plugin.onEvent("switch.current_similar", Collections.singletonMap("on", false));
                 } else if ("searchswitches".equals(mode)) {
                     plugin.onEvent("switch.search_ai", Collections.singletonMap("on", false));
                     main.postDelayed(() -> { try { call("showSearch"); } catch (Exception e) { throw new RuntimeException(e); } }, 300);
@@ -70,6 +83,8 @@ public final class PartyQaActivity extends Activity {
                 else if ("main".equals(mode)) call("setPartyEffect", String.class, "mirror");
                 main.postDelayed(() -> {
                     PartyView view = (PartyView)field("partyView");
+                    if ("trackbuttons".equals(mode) && (!Boolean.FALSE.equals(switches.get("search_similar")) || field("searchDialog")==null || !hasText(((Dialog)field("searchDialog")).getWindow().getDecorView(),"Aftenlys"))) throw new AssertionError("row recommendation click failed with text mode off");
+                    if ("trackbuttonsoff".equals(mode)) { try { Field buttons=PartyView.class.getDeclaredField("similarRects");buttons.setAccessible(true);if(!((java.util.List<?>)buttons.get(view)).isEmpty())throw new AssertionError("disabled row buttons stayed visible"); } catch(ReflectiveOperationException e) {throw new RuntimeException(e);} }
                     if ("searchswitches".equals(mode)) {
                         Dialog panel = (Dialog)field("searchDialog");
                         if (panel == null || hasText(panel.getWindow().getDecorView(), "AI DJ") || !Boolean.FALSE.equals(switches.get("search_ai"))) throw new AssertionError("AI switch did not hide the pill");
