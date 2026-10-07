@@ -16,6 +16,8 @@ Dette er en rigtig MA plugin-provider og en lille ændring af **MA's eksisterend
 
 ## Byg fra kildekode
 
+Den fastlåste MA-server kræver Python 3.14.
+
 `upstream.json` fastlåser server- og frontend-revisionerne. `apply.py` afviser andre revisioner og eksisterende AI DJ-filer; det ændrer ikke din HA eller en kørende MA-installation.
 
 ```sh

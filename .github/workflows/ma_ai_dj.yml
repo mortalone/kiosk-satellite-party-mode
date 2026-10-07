@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
       - run: python -m unittest discover -s ma_ai_dj/tests -v
       - run: python -m compileall -q ma_ai_dj/provider
       - name: Fetch pinned MA source and apply integration
