@@ -14,6 +14,7 @@ from unittest.mock import patch
 import httpx
 import uvicorn
 from libopensonic import AsyncConnection
+from libopensonic.errors import DataNotFoundError
 from starlette.datastructures import QueryParams
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -108,6 +109,25 @@ class ContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(playlist.entry[0].id, ID)
         await self.conn.update_playlist(playlists[0].id, name="Renamed", song_ids_to_add=[OTHER])
         self.assertEqual((await self.conn.get_playlist(playlists[0].id)).song_count, 2)
+
+    async def test_ma_track_resolution_missing_lyrics_then_audio(self):
+        await self.conn.search3("Tinalei", song_count=10)
+        song = await self.conn.get_song(ID)
+        await self.conn.get_album(song.album_id)
+        await self.conn.get_album_info2(song.album_id)
+        # Matches MA get_track_lyrics fallback: only DataNotFoundError is caught.
+        try:
+            await self.conn.get_lyrics(song.title, song.artist)
+        except DataNotFoundError:
+            pass
+        else:
+            self.fail("Missing lyrics must use the standard DataNotFoundError")
+        self.assertEqual(await self.conn.get_lyrics_by_song_id(ID), [])
+        url, _ = self.conn.get_stream_url(ID, tformat="raw", estimate_length=True)
+        async with httpx.AsyncClient(trust_env=False) as client:
+            response = await client.get(url)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.content, self.mp3)
 
     async def test_ma_audio_url_range_and_cache(self):
         await self.conn.search3("Tinalei", song_count=10)
