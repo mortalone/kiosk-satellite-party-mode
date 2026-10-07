@@ -37,6 +37,16 @@ Lyrics are cached in the persistent SQLite catalog for seven days, absent captio
 
 After updating, reload the YouTube/OpenSubsonic source in MA (or restart MA) so it detects the new `songLyrics` capability. This enables timed text in MA; display in another client, including the Kiosk lyric overlay, depends on that client's lyric support. No change to that client is included in this release.
 
+## Queue prefetch (0.1.3+)
+
+Enable **Hent kommende numre på forhånd** (`prefetch_enabled`, default on) and enter the direct **Music Assistant-serveradresse** (`music_assistant_url`), typically `http://192.168.0.18:8095`, and a **Music Assistant-token** (`music_assistant_token`). Use an MA access token, not a Home Assistant token; generate it in MA's user/profile settings. It needs permission to read queues. The URL must be the direct MA server, not the HA ingress URL on port 8123. No request is made until both URL and token are configured. Save and restart the bridge. The ingress helper shows connection state and how many upcoming tracks are cached, without exposing the token.
+
+The bridge polls MA every ten seconds using only `player_queues/all` and `player_queues/items`. It reads playing/paused or active queues, scans the next 50 queue positions after the current item, and prepares the next **Antal kommende YouTube-numre** (`prefetch_tracks`, default 2, configurable 1–5) per queue, with at most six target tracks across all rooms. Only OpenSubsonic items already known to this bridge are eligible; Spotify and unrelated sources are skipped. It never changes the queue, starts a player or skips a track.
+
+Downloads are sequential and share the normal audio cache. Direct uncached playback cancels other background downloads (including conversion), while playing the track already being prepared reuses its existing download. Reads of cached audio do not interrupt prefetch. Queue changes cancel obsolete background work; failed prefetch attempts wait five minutes before retrying. Disconnecting MA stops background work, while ordinary source playback remains available. Completed files stay in the bounded cache and may be evicted when space is needed.
+
+This hides loading time when a queued track has finished preparing before its turn. It cannot eliminate first-play latency for a new track selected directly, a rapid skip, or a slow/blocked YouTube download. Queue polling and priority behavior are tested with fixtures; connection to the user's actual MA queues still needs verification after setup.
+
 ## Audio cache and limitations
 
 Audio is fetched on demand, converted to stereo MP3 at 192 kbps / 44.1 kHz, and stored in a bounded cache for reliable HTTP Range requests, seeking and repeat playback. The first play waits for downloading/converting the track. This is not instantaneous direct streaming. Cached playback starts faster. MP3 conversion cannot improve the source quality. The cache is separate from the persistent catalog: eviction removes audio, not playlist IDs.

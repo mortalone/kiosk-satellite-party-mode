@@ -32,7 +32,7 @@ jobs:
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:18102/health; then
               curl --fail --silent 'http://127.0.0.1:18102/rest/ping.view?u=youtube&p=test-password&f=json' | python -c 'import json,sys; assert json.load(sys.stdin)["subsonic-response"]["status"] == "ok"'
-              docker exec youtube-test python -c 'import captions; assert captions.parse_captions("{\"events\": []}", "json3") == []'
+              docker exec youtube-test python -c 'import captions, queue_prefetch; assert captions.parse_captions("{\"events\": []}", "json3") == []'
               docker exec youtube-test node --version
               docker exec youtube-test python -m yt_dlp --version
               exit 0

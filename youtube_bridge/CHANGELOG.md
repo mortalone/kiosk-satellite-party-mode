@@ -1,3 +1,10 @@
+# 0.1.3
+
+- Prefetch upcoming YouTube tracks from MA queues through its read-only API.
+- Configurable MA URL/token and 1–5 tracks per queue; Danish labels and ingress status.
+- Prioritize uncached direct playback, reuse matching downloads, and cancel obsolete background work including FFmpeg subprocesses.
+- Reuse the bounded cache and back off failed downloads; no queue or player changes.
+
 # 0.1.2
 
 - Optional video captions as lyrics, with original timestamps exposed through OpenSubsonic songLyrics v1.
