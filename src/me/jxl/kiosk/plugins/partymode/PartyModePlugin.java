@@ -65,7 +65,7 @@ public final class PartyModePlugin implements KioskPlugin {
     private Application application;
     private Application.ActivityLifecycleCallbacks lifecycle;
     private Activity currentActivity, partyActivity;
-    private ExecutorService io, artIo;
+    private ExecutorService io, artIo, partyPolicyIo;
     private BroadcastReceiver partyAudioReceiver;
     private FrameLayout partyRoot;
     private PartyView partyView;
@@ -137,10 +137,10 @@ public final class PartyModePlugin implements KioskPlugin {
     private final Runnable tick = new Runnable() {
         @Override public void run() {
             if (host == null || context == null) return;
-            pollMedia(); pollVisibility(); pollGuestAccessState();
+            pollMedia(); pollVisibility(); pollGuestAccessState(); pollPartyPolicy();
             updatePresentation();
             if (partyFullscreen) {
-                updateParty(); pollPartyQueue(); pollPartyGuests(); pollPartyPolicy(); pollPlayerVolume(); pollPartyLyrics();
+                updateParty(); pollPartyQueue(); pollPartyGuests(); pollPlayerVolume(); pollPartyLyrics();
                 publishPresentation();
                 if (activeKioskActivity() != null && SystemClock.elapsedRealtime() - partyLastPostpone > 15000) {
                     partyLastPostpone = SystemClock.elapsedRealtime(); partyHostCommand("postponeScreensaver");
@@ -153,7 +153,7 @@ public final class PartyModePlugin implements KioskPlugin {
     @Override public synchronized void start(PluginHost host, Map<String, Object> settings) {
         this.host = host; context = applicationContext(host);
         if (context == null) { host.status("Android application context unavailable.", true); return; }
-        io = Executors.newFixedThreadPool(3); artIo = Executors.newFixedThreadPool(2);
+        io = Executors.newFixedThreadPool(3); artIo = Executors.newFixedThreadPool(2); partyPolicyIo = Executors.newSingleThreadExecutor();
         main.post(() -> {
             registerLifecycle(); registerPartyAudioReceiver();
             currentActivity = findResumedActivity();
@@ -329,7 +329,7 @@ public final class PartyModePlugin implements KioskPlugin {
         };
         if (Looper.myLooper() == Looper.getMainLooper()) cleanup.run();
         else { main.post(cleanup); try { done.await(2, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); } }
-        if (io != null) io.shutdownNow(); if (artIo != null) artIo.shutdownNow(); io = null; artIo = null; host = null;
+        if (io != null) io.shutdownNow(); if (artIo != null) artIo.shutdownNow(); if (partyPolicyIo != null) partyPolicyIo.shutdownNow(); io = null; artIo = null; partyPolicyIo = null; host = null;
     }
 
     private void pollMedia() {
@@ -717,13 +717,13 @@ public final class PartyModePlugin implements KioskPlugin {
         reportedPartyPolicy = summary;
     }
     private void pollPartyPolicy() {
-        if (host == null || context == null || io == null || partyPolicyPending || activeQueue().isEmpty()) return;
+        if (host == null || context == null || partyPolicyIo == null || partyPolicyPending || activeQueue().isEmpty()) return;
         if (context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).getString("guest_url", "").isEmpty()) return;
         long now = SystemClock.elapsedRealtime();
         if (now - partyPolicyLastPoll < 10000) return;
         partyPolicyLastPoll = now; partyPolicyPending = true;
         final String connection = guestConnection();
-        io.execute(() -> {
+        partyPolicyIo.execute(() -> {
             JSONObject result = null;
             try { result = companionRequest(connection, "Party Guest", "/api/party-settings", null); } catch (Exception ignored) {}
             final JSONObject policy = result;
@@ -731,10 +731,10 @@ public final class PartyModePlugin implements KioskPlugin {
         });
     }
     private void changePartyPolicy(JSONObject changes) throws Exception {
-        if (io == null) return;
+        if (partyPolicyIo == null) return;
         changes.put("queue_id", activeQueue());
         final String connection = guestConnection();
-        io.execute(() -> {
+        partyPolicyIo.execute(() -> {
             try {
                 JSONObject policy = companionRequest(connection, "Party Guest", "/api/party-settings", changes);
                 main.post(() -> { if (host != null && context != null && connection.equals(guestConnection())) try { publishPartyPolicy(policy); } catch (Exception ignored) {} });

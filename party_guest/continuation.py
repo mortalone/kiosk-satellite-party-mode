@@ -79,7 +79,7 @@ class Continuation:
                     self.info['status'] = f'Gæsternes kø spiller · {remaining} kommende numre'
                 return
             items = self.snapshot(queue_id, queue)
-            existing = {item.get('media_item', {}).get('uri') for item in items}
+            existing = {(item.get('media_item') or {}).get('uri') for item in items}
             current = (queue.get('current_item') or {}).get('media_item') or {}
             method = policy['auto_method']
             if pending is not None and (pending['queue'] != queue_id or pending['policy'] != policy or

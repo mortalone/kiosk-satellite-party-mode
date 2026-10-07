@@ -80,7 +80,7 @@ public final class PartyQaActivity extends Activity {
                         if (!Boolean.FALSE.equals(switches.get("menu_visuals")) || !Boolean.FALSE.equals(switches.get("menu_guests"))) throw new AssertionError("category switches missing");
                     }
                     if ("guestpage".equals(mode) && (!String.valueOf(field("partyGuestUrl")).startsWith("http://127.0.0.1:18095/guest/#token=") || String.valueOf(field("partyGuestUrl")).contains("fixture-token") || field("partyQr") == null)) throw new AssertionError("custom guest QR absent or contains host token");
-                    if ("guestpage".equals(mode) && (!Boolean.TRUE.equals(switches.get("continuous")) || !"Favoritnumre".equals(selects.get("auto_method")) || !"2".equals(selects.get("auto_count")) || !"Som næste".equals(selects.get("queue_placement")))) throw new AssertionError("Party HA controls did not round trip");
+                    if ("guestpage".equals(mode) && (!Boolean.TRUE.equals(switches.get("continuous")) || !"Favoritnumre".equals(selects.get("auto_method")) || !"2".equals(selects.get("auto_count")) || !"Som næste".equals(selects.get("queue_placement")))) throw new AssertionError("Party HA controls did not round trip: switches="+switches+" selects="+selects+" policy="+policy);
                     if ("switch".equals(mode) && !publishedPartyState) throw new AssertionError("HA switch did not report Party active");
                     if (view == null) throw new AssertionError("Party root missing");
                     if ("main".equals(mode) && (!switches.containsKey("search_ai") || !switches.containsKey("search_similar") || !switches.containsKey("search_library") || !switches.containsKey("current_similar"))) throw new AssertionError("search switches absent");

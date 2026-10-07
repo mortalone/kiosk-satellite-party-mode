@@ -83,34 +83,13 @@ forespørgsel kan vælge en anden gruppe eller indsende vilkårlige track-URI'er
 forslag udløber efter 30 minutter og kan kun tilføjes én gang. Google-højttalernes
 frie tale-input er endnu ikke koblet på; API'en er den fælles indgang til dette.
 
-## Kontinuerlig DJ (0.1.2)
+## Automatisk fortsættelse i Party Guest (0.1.6)
 
-Åbn ingress-siden i HA, skriv dit ønske og vælg **Køvalg**. Tryk **Start kontinuerlig DJ**.
-Det valgte køvalg gælder kun første portion. Derefter tilføjes nye portioner **sidst**,
-så gæsternes og dine eksisterende køvalg bevares. Vælg **Spil nu** eller **Erstat hele
-køen og spil nu**, hvis DJ'en også skal starte musikken. Standardvalget **Tilføj sidst**
-starter ikke afspilningen. En kø, der allerede har mange numre foran, fyldes først op,
-når den bliver kort. Ved shuffle styrer MA rækkefølgen og kan blande nye numre ind.
+Gæsternes køplacering og automatisk fortsættelse styres nu i **[Party Guest 0.2.0](../party_guest/DOCS.md)**. Vælg Favoritnumre, Samme stil via MA eller AI-musikønske, og 1–5 kommende numre (standard 1). Kiosk Party 0.1.14 udstiller til/fra og valg som HA-switch/selects. Bibliotek og Samme stil kræver ingen AI DJ.
 
-DJ'en kontrollerer køen hvert 20. sekund, finder højst 8 numre ad gangen og fylder mod
-8 numre foran, når højst 3 er tilbage. AI-forespørgsler startes højst cirka hvert 2.
-minut, og kun når der skal fyldes op. Katalogmatches kontrolleres som før. De seneste
-500 DJ-numre og den nærmeste eksisterende kø udelukkes; AI får også besked om at variere
-kunstnere og vælge nye indspilninger. Modellen kan stadig foreslå for få nye matches.
-Ved fejl eller manglende matches vises årsagen, og DJ'en prøver igen efter 2 minutter.
-Dette er ikke en garanti for uafbrudt musik ved AI-/MA-nedbrud eller en tom musikkilde.
+AI DJ ingress viser fortsat manuelle forslag med køvalg til de numre, du selv tilføjer fra den side. Det valg ændrer ikke gæsternes placering. Party Guest bruger AI DJ alene som valgfri forslagsmotor.
 
-Den kan køre, mens siden er lukket, indtil **Stop DJ** eller add-on'en genstartes.
-Pause/stop af afspilleren suspenderer påfyldning; DJ'en genstarter ikke en manuelt
-stoppet afspiller. Når du spiller igen, fortsætter påfyldningen. Stop DJ bevarer de
-numre, som allerede er tilføjet, og afviser et AI-resultat, der endnu ikke er indsat.
-Efter genstart af add-on'en skal kontinuerlig DJ aktiveres igen.
-
-Kontinuerlig DJ startes og stoppes kun fra HA ingress. Gæster kan fortsat lave og
-indsætte almindelige DJ-forslag; gæste-tokenet kan ikke starte en vedvarende DJ eller
-ændre AI-indstillinger. Host-API: `GET/POST /api/admin/radio`, POST med
-`{"action":"start","prompt":"varieret rolig jazz","option":"add"}` eller
-`{"action":"stop"}`. Et nyt musikønske kræver stop og start igen.
+Den tidligere kontinuerlige DJ-motor bevares som kompatibilitet til eksisterende automationskald. Ingress har ikke længere Start/Stop DJ-knapper. Den gamle ingress-beskyttede API er `GET/POST /api/admin/radio` med `{"action":"start","prompt":"varieret rolig jazz","option":"add"}` eller `{"action":"stop"}`. Den starter som slået fra efter genstart. Brug Party Guest til den nye, fælles Party-styring, og undgå at køre begge påfyldningsmotorer på samme kø.
 
 ## Native MA search switches (0.1.3)
 
