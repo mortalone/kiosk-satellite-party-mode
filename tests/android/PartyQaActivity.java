@@ -108,8 +108,9 @@ public final class PartyQaActivity extends Activity {
                             Field sideField=PartyView.class.getDeclaredField("guestQrSide");sideField.setAccessible(true);
                             float side=sideField.getFloat(view);
                             String size="qrsmall".equals(mode)?"Small":"Large";
-                            float base=Math.min(view.getWidth()*.13f,view.getHeight()*.25f);
-                            if (Math.abs(side-base*("Large".equals(size)?1.65f:1f))>1) throw new AssertionError("QR size layout incorrect");
+                            boolean landscape=view.getWidth()>=view.getHeight();
+                            float base=Math.min(view.getWidth()*(landscape?.13f:.28f),view.getHeight()*(landscape?.25f:.17f));
+                            if (Math.abs(side-base*("Large".equals(size)?1.65f:1f))>1) throw new AssertionError("QR size layout incorrect: " + side + " base=" + base + " size=" + size);
                             Field pf=PartyModePlugin.class.getDeclaredField("PARTY_PREFS");pf.setAccessible(true);
                             if (!size.equals(field("guestQrSize")) || !size.equals(getSharedPreferences((String)pf.get(null),MODE_PRIVATE).getString("guest_qr_size", ""))) throw new AssertionError("QR size not saved");
                         } catch (ReflectiveOperationException e) {throw new RuntimeException(e);}
