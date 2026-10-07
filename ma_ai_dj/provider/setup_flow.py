@@ -15,10 +15,13 @@ async def run_setup(session: SetupSession) -> None:
     """Configure the bridge without passing its token to the guest browser."""
     values = await session.form(
         [
-            ConfigEntry(key="addon_url", type=ConfigEntryType.STRING, required=True),
             ConfigEntry(
-                key="addon_token", type=ConfigEntryType.SECURE_STRING, required=True
+                key="addon_url",
+                type=ConfigEntryType.STRING,
+                required=True,
+                value=session.context.setup_data.get("addon_url"),
             ),
+            ConfigEntry(key="addon_token", type=ConfigEntryType.SECURE_STRING, required=True),
         ],
         step_id="connection",
         last_step=True,

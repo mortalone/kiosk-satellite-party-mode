@@ -11,12 +11,13 @@ from urllib.parse import urlsplit
 from aiohttp import ClientError, ClientTimeout
 from music_assistant_models.auth import Scope, UserRole
 from music_assistant_models.config_entries import ConfigEntry
-from music_assistant_models.enums import ConfigEntryType, MediaType
+from music_assistant_models.enums import ConfigEntryType
 from music_assistant_models.errors import (
     InvalidDataError,
     MusicAssistantError,
     SetupFailedError,
 )
+from music_assistant_models.media_items import Track
 
 from music_assistant.controllers.webserver.helpers.auth_middleware import (
     get_current_client_id,
@@ -49,7 +50,7 @@ class PartyAiDj(PluginProvider):
 
     async def handle_async_init(self) -> None:
         """Validate the host-controlled connection."""
-        self._base = str(self.config.get_value("addon_url") or "").rstrip("/")
+        self._base = str(self.get_setup_value("addon_url") or "").rstrip("/")
         parsed = urlsplit(self._base)
         if (
             parsed.scheme not in {"http", "https"}
@@ -58,24 +59,16 @@ class PartyAiDj(PluginProvider):
             or parsed.query
             or parsed.fragment
         ):
-            raise SetupFailedError(
-                "Enter the addon's HTTP(S) address without a token or query"
-            )
-        self._token = str(self.config.get_value("addon_token") or "")
+            raise SetupFailedError("Enter the addon's HTTP(S) address without a token or query")
+        self._token = str(self.get_setup_value("addon_token") or "")
         if len(self._token) < 24:
-            raise SetupFailedError(
-                "The addon token must contain at least 24 characters"
-            )
+            raise SetupFailedError("The addon token must contain at least 24 characters")
         self._bridge = DjBridge(self._request)
         self._unregister: list[Callable[[], None]] = []
 
     async def get_config_entries(self) -> tuple[ConfigEntry, ...]:
         """Return connection settings visible only to the MA host."""
-        return (
-            ConfigEntry(
-                key="guest_ai", type=ConfigEntryType.BOOLEAN, default_value=True
-            ),
-        )
+        return (ConfigEntry(key="guest_ai", type=ConfigEntryType.BOOLEAN, default_value=True),)
 
     async def loaded_in_mass(self) -> None:
         """Register authenticated commands; there is deliberately no enqueue endpoint."""
@@ -128,7 +121,7 @@ class PartyAiDj(PluginProvider):
                 track = await self.mass.music.get_item_by_uri(
                     raw["uri"], allow_update_metadata=False
                 )
-                if track.media_type != MediaType.TRACK or not track.available:
+                if not isinstance(track, Track) or not track.available:
                     continue
                 if visible is not None and not any(
                     mapping.provider_instance in visible and mapping.available
@@ -136,7 +129,7 @@ class PartyAiDj(PluginProvider):
                 ):
                     continue
                 tracks.append(track.to_dict())
-            except (KeyError, TypeError, MusicAssistantError):
+            except KeyError, TypeError, MusicAssistantError:
                 continue
         result["tracks"] = tracks
         return result
@@ -149,7 +142,7 @@ class PartyAiDj(PluginProvider):
         if user.role == UserRole.GUEST and (
             user.username != "party_guest"
             or not party.config.get_value("enable_guest_access")
-            or not self.config.get_value("guest_ai", True)
+            or not self.get_config_value("guest_ai", True)
         ):
             raise InvalidDataError("AI guest access is disabled")
         queue = await party.get_party_player()

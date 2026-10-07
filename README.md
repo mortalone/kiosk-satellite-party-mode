@@ -60,7 +60,7 @@ CI also extracts the actual release ZIP using Kiosk Satellite’s pinned SDK 1 i
 - **Show Quick Actions above Party** is off by default; requires Quick Actions 0.2.7+. Its action-specific visibility rules remain active. This switch permits the rail during Party even without a screensaver.
 - EQ choices are off by default; select **EQ** or **Playlists and EQ** in **Playlist and EQ controls**. Enable it with Menu only or Menu and Close for Party Punch / Restore original EQ.
 - For a locked guest screen: hide Menu/Close, search, queue tapping, volume, playback buttons, EQ, and Quick Actions independently. HA start/stop and visibility remain available.
-- The old Show full queue backend switch is replaced by the two track counts. Saved current-song/full-queue actions remain supported. MA guest setup instructions appear in plugin status, never over the music.
+- The old Show full queue backend switch is replaced by the two track counts. Saved current-song/full-queue actions remain supported. When a QR is unavailable, a short setup explanation appears on the Party screen.
 
 ### Party Punch: a starting point for Sonos Play:5 Gen 1
 
@@ -114,24 +114,15 @@ same MA lyrics as ordinary Lyrics, highlights synchronized lines and adds bounde
 color/glow/scale updates from the existing audio analyzer (no extra FFT). Unsynced
 lyrics are displayed without simulated timing.
 
-The search sheet now includes an experimental **AI DJ** mood-search toggle. See
-[AI DJ setup and Lovelace examples](home_assistant/README.md) for dependencies,
-limitations, optional Danish translation and the future voice entry point.
+### AI DJ and Similarity
 
-### A real AI DJ (0.1.9)
+[Party AI DJ](ai_dj/DOCS.md) reuses HA AI Task or an OpenAI-compatible engine and matches suggestions against the Music Assistant catalog. Missing tracks are skipped. Artist/title matches are verified; musical claims and original release years can remain uncertain.
 
-Install [Party AI DJ](ai_dj/DOCS.md) from this repository’s HA add-on store. It
-curates artist/title/year candidates with HA AI Task or an OpenAI-compatible
-endpoint, resolves only real Music Assistant catalog matches, skips missing songs
-and previews a varied list before queueing. The native **DJ** button, optional
-guest QR, Lovelace and automation API share the same backend. Configure its
-address from the Party menu, without adding SDK settings or removing existing actions.
+Party Mode 0.1.11 brings Library, Similarity and AI DJ into one native search sheet under the magnifying glass, with a shared input, cover-art results and ordinary queue placement. The four saved HA switches are **Search: Library**, **Search: Similarity**, **Search: AI DJ** and **Similar to current track**. They use the runtime entity budget, not the 20 manifest settings. Allow music search remains the master permission.
 
-The earlier mood-search toggle is now called **Similarity**. Enable **Vis lignende-
-numre-knapper** for per-result ≈ lists, or use the current-track similar list in
-the Party menu. Artist/title identity is verified; AI musical claims and original
-release years are not always independently verifiable.
+Configure the existing addon's address and token only in the settings menu. The separate DJ button and alternative AI-addon QR are retired. Guest QR always opens the existing MA Party guest page. A short explanation appears when its QR cannot be obtained.
 
+[MA AI DJ integration source](ma_ai_dj/README.md) adds the AI backend bridge and search controls to that same MA guest page. It is experimental source for a customized MA build, not a plugin that stock MA can install from this HA repository.
 
 ## 0.1.10: Guest switches for Home Assistant
 
@@ -143,7 +134,7 @@ Two additional switches are published by the plugin:
   group and MA configuration permissions are required. Unknown/ambiguous access
   is not published as a false off state; the switch appears after confirmation.
 - **Guest QR** controls the saved QR visibility preference. Hiding it does not
-  disable guest access; AI DJ QR selection continues to follow the existing settings.
+  disable guest access; QR follows the existing MA guest page.
 
 The existing **Party Mode** switch and enable/disable actions remain available.
 These are entities, using Kiosk's separate limit of 32 sensor/select/switch entities,
