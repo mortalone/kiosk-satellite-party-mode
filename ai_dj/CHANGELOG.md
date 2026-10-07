@@ -1,3 +1,10 @@
+## 0.1.6
+
+- Party Guest owns guest placement and automatic continuation. Remove legacy continuous controls from AI ingress; retain backend compatibility for existing automations.
+- Explain that the AI ingress placement selector applies only to manual selections from that page.
+- Accept bounded recent/queued exclusions from Party Guest for varied automatic AI suggestions.
+- Share guest capability checks with the independent portal.
+
 ## 0.1.5
 - Retain the embedded guest endpoints for existing connections while the independent Party Guest add-on hosts new guest pages.
 - Share the guest frontend/capability contract with the independent portal. Party Guest can use AI DJ 0.1.3+ as an optional remote engine; Søg and Similar do not require it.

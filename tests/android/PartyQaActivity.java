@@ -23,6 +23,8 @@ public final class PartyQaActivity extends Activity {
     private ServerSocket server;
     private boolean publishedPartyState;
     private final Map<String, Boolean> switches = new HashMap<>();
+    private final Map<String, String> selects = new HashMap<>();
+    private final JSONObject policy = new JSONObject();
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
         @Override public void onReceive(Context c, Intent intent) {
             String mode = intent.getStringExtra("mode");
@@ -47,6 +49,13 @@ public final class PartyQaActivity extends Activity {
                     getSharedPreferences("party_mode_presentation", MODE_PRIVATE).edit()
                             .putString("guest_url", "http://127.0.0.1:18095/#token=public-emulator-dj-fixture-token").putString("dj_url", "").commit();
                     plugin.onEvent("select.guest_page", Collections.singletonMap("option", "Party guest page"));
+                    call("pollPartyPolicy");
+                    main.postDelayed(() -> {
+                        plugin.onEvent("switch.continuous", Collections.singletonMap("on", true));
+                        plugin.onEvent("select.auto_method", Collections.singletonMap("option", "Favoritnumre"));
+                        plugin.onEvent("select.auto_count", Collections.singletonMap("option", "2"));
+                        plugin.onEvent("select.queue_placement", Collections.singletonMap("option", "Som næste"));
+                    }, 400);
                 }
                 else if ("playlists".equals(mode)) call("showPlaylists");
                 else if ("dj".equals(mode)) call("configureDj");
@@ -71,6 +80,7 @@ public final class PartyQaActivity extends Activity {
                         if (!Boolean.FALSE.equals(switches.get("menu_visuals")) || !Boolean.FALSE.equals(switches.get("menu_guests"))) throw new AssertionError("category switches missing");
                     }
                     if ("guestpage".equals(mode) && (!String.valueOf(field("partyGuestUrl")).startsWith("http://127.0.0.1:18095/guest/#token=") || String.valueOf(field("partyGuestUrl")).contains("fixture-token") || field("partyQr") == null)) throw new AssertionError("custom guest QR absent or contains host token");
+                    if ("guestpage".equals(mode) && (!Boolean.TRUE.equals(switches.get("continuous")) || !"Favoritnumre".equals(selects.get("auto_method")) || !"2".equals(selects.get("auto_count")) || !"Som næste".equals(selects.get("queue_placement")))) throw new AssertionError("Party HA controls did not round trip");
                     if ("switch".equals(mode) && !publishedPartyState) throw new AssertionError("HA switch did not report Party active");
                     if (view == null) throw new AssertionError("Party root missing");
                     if ("main".equals(mode) && (!switches.containsKey("search_ai") || !switches.containsKey("search_similar") || !switches.containsKey("search_library") || !switches.containsKey("current_similar"))) throw new AssertionError("search switches absent");
@@ -102,7 +112,7 @@ public final class PartyQaActivity extends Activity {
                     Map<String,Object> response = new HashMap<>(); response.put("state", "playing"); response.put("attributes", attrs); callback.onResult(true, response, null);
                 } else callback.onResult(true, Collections.emptyMap(), null);
             }
-            @Override public void publishSelect(String key, String name, String[] options, String value) {}
+            @Override public void publishSelect(String key, String name, String[] options, String value) { selects.put(key, value); }
             @Override public void publishSwitch(String key, String name, boolean state) { switches.put(key, state); if ("active".equals(key)) publishedPartyState = state; }
             @Override public void subscribe(String event) {} @Override public void unsubscribe(String event) {}
             @Override public void showWindow(String a, String b, String c) {} @Override public void hideWindow() {}
@@ -161,7 +171,19 @@ public final class PartyQaActivity extends Activity {
             if(header.toLowerCase().startsWith("authorization:"))auth=header.substring(14).trim();
         }
         byte[] data;String content;
-        if(first.contains("/api/guest-link")) {
+        if(first.contains("/api/party-settings")) {
+            if (!"Bearer public-emulator-dj-fixture-token".equals(auth)) throw new AssertionError("Party settings need host auth");
+            synchronized(policy) {
+                if (!policy.has("queue_id")) policy.put("queue_id", "qa-group").put("continuous", false).put("auto_method", "similar").put("auto_count", 1).put("queue_option", "add");
+                if (first.startsWith("POST")) {
+                    char[] body=new char[length]; int read=0,n; while(read<length&&(n=in.read(body,read,length-read))>0)read+=n;
+                    JSONObject request=new JSONObject(new String(body,0,read));
+                    if (!"qa-group".equals(request.optString("queue_id"))) throw new AssertionError("wrong policy queue");
+                    Iterator<String> keys=request.keys(); while(keys.hasNext()) { String key=keys.next(); policy.put(key, request.get(key)); }
+                }
+                data=policy.toString().getBytes("UTF-8"); content="application/json";
+            }
+        } else if(first.contains("/api/guest-link")) {
             if (!"Bearer public-emulator-dj-fixture-token".equals(auth)) throw new AssertionError("guest link needs host auth");
             char[] body=new char[length]; int read=0,n; while(read<length&&(n=in.read(body,read,length-read))>0)read+=n;
             JSONObject request=new JSONObject(new String(body,0,read));

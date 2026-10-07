@@ -6,5 +6,5 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
-COPY server.py guests.py index.html guest.html ./
+COPY server.py guests.py continuation.py index.html guest.html ./
 CMD ["python", "server.py"]

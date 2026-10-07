@@ -278,7 +278,12 @@ def handler(dj, ingress=False):
                 if path=='/api/guest-link' and allowed: return self.reply(200,dj.guests.link(data))
                 if path=='/api/guest/search': return self.reply(202,dj.guests.search(guest_token,data))
                 if path=='/api/guest/queue': return self.reply(200,dj.guests.enqueue(guest_token,data))
-                if path=='/api/suggest': return self.reply(202,dj.suggest(data))
+                if path=='/api/suggest':
+                    excluded = data.get('exclude', [])
+                    if not isinstance(excluded, list) or len(excluded) > 200 or any(
+                            not isinstance(t, dict) or any(not isinstance(t.get(k, ''), str) or len(t.get(k, '')) > 2048 for k in ('uri', 'artist', 'title')) for t in excluded):
+                        raise ValueError('Ugyldig liste over tidligere numre')
+                    return self.reply(202,dj.suggest(data, exclude=excluded))
                 if path=='/api/queue': return self.reply(200,dj.enqueue(data))
                 self.reply(404,{'error':'Ukendt endpoint'})
             except Exception as error: self.reply(400,{'error':str(error)[:250]})

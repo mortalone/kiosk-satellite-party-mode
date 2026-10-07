@@ -1,3 +1,12 @@
+## 0.2.0
+
+- Light MA-inspired guest layout with Bibliotek / Samme stil / AI, plain-language help and a live highlighted queue.
+- Host-owned queue placement reflected in guest text; guests cannot choose a different placement.
+- Party-owned automatic continuation from favorite tracks, MA recommendations or optional AI, in batches of 1–5 upcoming tracks (default 1).
+- Cancel stale candidates when guests add music; recheck playback/queue before appending. Do not resume paused or stopped players.
+- Persist host policy, keep continuation off after restart, and expose authenticated controls for Kiosk's HA switch/selects and optional external HA helpers.
+- Favorites cycle without immediate repeats; AI can exclude recent and queued music with AI DJ 0.1.6.
+
 ## 0.1.0
 
 - Standalone guest portal independent of Kiosk and Party AI DJ; uses official MA's API.

@@ -1,3 +1,13 @@
+## Party Mode 0.1.14 · Party Guest 0.2.0 · AI DJ 0.1.6
+
+- Give the independent guest page a light MA-inspired layout, cyan search pills, cover art and a live queue with the current track highlighted. Bibliotek is ordinary search without AI; Samme stil and optional AI have plain-language explanations.
+- Move guest queue placement and automatic continuation into Party Guest ingress. The guest footer follows the host policy; guest requests cannot override it.
+- Automatically fill a short playing queue from favorite tracks, MA similar-track recommendations or an optional AI prompt. Default to one upcoming automatic track; allow 1–5. Prefetch candidates before the tail finishes, discard pending results after new requests, and recheck external MA additions before appending.
+- Never resume a paused/stopped player or replace a queue during automatic filling. Favorites cycle after eligible favorites have played; AI receives recent/queued exclusions. Saved continuation remains off after restart unless an explicitly linked HA switch enables it.
+- Kiosk publishes one HA switch and three selects for continuation, method, count and guest placement when connected to Party Guest. Controls work while the Party display is closed. Existing HA helpers can alternatively be linked in addon configuration.
+- Remove the old continuous-DJ controls from AI ingress; retain its backend for existing automations and its separate manual preview placement selector. AI DJ supplies optional suggestions to Party Guest, and stock Music Assistant remains unchanged.
+- Test bounded filling, guest races, pause/stop, persistence and HA helpers; browser checks cover the light page, three modes, host policy and guest isolation; native emulator checks round-trip all four Party HA controls.
+
 ## Party Mode 0.1.13 — independent Party Guest 0.1.0
 
 - Separate the Party guest portal from AI DJ. Søg, Similar, current-track recommendations and append-to-queue work without AI DJ installed or Kiosk running.

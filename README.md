@@ -1,3 +1,5 @@
+> Nyeste: **Party Mode 0.1.14**, **Party Guest 0.2.0**, **Party AI DJ 0.1.6**. Party Guest har en lys gæsteside med Bibliotek / Samme stil / AI og styrer nu køplacering og automatisk fortsættelse. Se [Party Guest-opsætning](party_guest/DOCS.md).
+
 # Party Mode for Kiosk Satellite
 
 A standalone full-screen plugin with its own settings, Home Assistant actions and visibility. Party does not depend on Now Playing being enabled or its visibility, nor on an active screensaver. It renders the selected Music Assistant speaker group's queue and optional guest QR over native audio effects.

@@ -13,14 +13,18 @@ class FixturePortal(Portal):
         self.tracks = [{'uri': 'library://track/1', 'name': 'Aftenlys', 'artists': [{'name': 'Natteholdet'}]},
                        {'uri': 'library://track/2', 'name': 'Stjernestøv', 'artists': [{'name': 'Natteholdet'}]}]
     def ma(self, command, args):
-        if command == 'player_queues/get': return {'current_item': {'media_item': self.tracks[0]}}
+        if command == 'player_queues/get': return {'state': 'playing', 'current_index': 0, 'items': 2, 'current_item': {'queue_item_id': 'q0', 'media_item': self.tracks[0]}}
+        if command == 'player_queues/items': return [{'queue_item_id': 'q'+str(i), 'media_item': t} for i,t in enumerate(self.tracks)]
         if command == 'music/search': return {'tracks': self.tracks}
         if command == 'music/tracks/similar_tracks': return self.tracks
         if command == 'player_queues/play_media':
-            assert args['queue_id'] == 'group' and args['option'] == 'add'
+            assert args['queue_id'] == 'group' and args['option'] == self.policy()['queue_option']
             assert set(args['media']).issubset({t['uri'] for t in self.tracks})
             self.added.extend(args['media']); return None
         raise AssertionError(command)
+    def ai_available(self): return self.party_policy['auto_method'] == 'ai'
+    def suggest(self, data): return {'id': 'fixture-ai-job'}
+    def job(self, key): return {'state': 'ready', 'tracks': self.tracks}
     def ai_request(self, path, data=None):
         raise AssertionError('No AI service exists in this fixture')
 

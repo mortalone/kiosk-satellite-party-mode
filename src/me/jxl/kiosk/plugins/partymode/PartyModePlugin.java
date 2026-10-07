@@ -120,7 +120,9 @@ public final class PartyModePlugin implements KioskPlugin {
     private final String[] menuKeys = {"visuals", "music", "screen", "guests", "sound", "diagnostics"};
     private final String[] menuNames = {"Visualisering", "Musik og AI-forbindelse", "Skærm og betjening", "Gæster og QR", "Lyd og EQ", "Grafik og status"};
     private final Set<String> menuCategories = new HashSet<>();
-    private long foregroundUntil, foregroundLastTry;
+    private long foregroundUntil, foregroundLastTry, partyPolicyLastPoll;
+    private boolean partyPolicyPending;
+    private String reportedPartyPolicy = "";
     private boolean partyPollPending, partyGuestPending, partyGuestChangePending;
     private long partyLastPoll, partyLastSuccess, partyGuestLastPoll, partyGuestLastSuccess, partyLastPostpone;
     private volatile long partyGeneration, partyGuestGeneration;
@@ -138,7 +140,7 @@ public final class PartyModePlugin implements KioskPlugin {
             pollMedia(); pollVisibility(); pollGuestAccessState();
             updatePresentation();
             if (partyFullscreen) {
-                updateParty(); pollPartyQueue(); pollPartyGuests(); pollPlayerVolume(); pollPartyLyrics();
+                updateParty(); pollPartyQueue(); pollPartyGuests(); pollPartyPolicy(); pollPlayerVolume(); pollPartyLyrics();
                 publishPresentation();
                 if (activeKioskActivity() != null && SystemClock.elapsedRealtime() - partyLastPostpone > 15000) {
                     partyLastPostpone = SystemClock.elapsedRealtime(); partyHostCommand("postponeScreensaver");
@@ -159,7 +161,7 @@ public final class PartyModePlugin implements KioskPlugin {
             context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit()
                     .putBoolean("party_fullscreen", false).putLong("party_until_ms", 0).apply();
             context.sendBroadcast(new Intent(PARTY_EVENT).setPackage(context.getPackageName()));
-            reportedGuestPage = ""; reportedMenuCategories = ""; reportedSearchModes = ""; reportedPartyState = null; reportedPartyEffect = null; reportedGuestAccess = null; reportedGuestQr = null; guestAccessState = null; guestAccessQueue = ""; guestStateLastPoll = 0; publishPartyState();
+            reportedPartyPolicy = ""; partyPolicyLastPoll = 0; reportedGuestPage = ""; reportedMenuCategories = ""; reportedSearchModes = ""; reportedPartyState = null; reportedPartyEffect = null; reportedGuestAccess = null; reportedGuestQr = null; guestAccessState = null; guestAccessQueue = ""; guestStateLastPoll = 0; publishPartyState();
             configureOnMain(settings);
             readKioskMusicAssistantConfig();
             host.executeCommand("getDashboardState", Collections.emptyMap(), (ok, data, error) -> {
@@ -262,6 +264,22 @@ public final class PartyModePlugin implements KioskPlugin {
         });
     }
     @Override public synchronized void onEvent(String event, Map<String, Object> payload) {
+        if ("switch.continuous".equals(event) || "select.auto_method".equals(event) || "select.auto_count".equals(event) || "select.queue_placement".equals(event)) {
+            main.post(() -> {
+                if (host == null || context == null) return;
+                try {
+                    JSONObject changes = new JSONObject();
+                    if ("switch.continuous".equals(event)) changes.put("continuous", Boolean.TRUE.equals(payload.get("on")));
+                    else {
+                        String value = String.valueOf(payload.get("option"));
+                        if ("select.auto_method".equals(event)) changes.put("auto_method", "Favoritnumre".equals(value) ? "favorites" : "Samme stil (MA)".equals(value) ? "similar" : "AI-musikønske".equals(value) ? "ai" : "");
+                        else if ("select.auto_count".equals(event)) changes.put("auto_count", Integer.parseInt(value));
+                        else changes.put("queue_option", "Sidst i køen".equals(value) ? "add" : "Som næste".equals(value) ? "next" : "Spil straks".equals(value) ? "play" : "Erstat kommende".equals(value) ? "replace_next" : "");
+                    }
+                    changePartyPolicy(changes);
+                } catch (Exception error) { host.status("Party-indstillingen kunne ikke ændres", true); }
+            }); return;
+        }
         if ("select.guest_page".equals(event)) {
             main.post(() -> { if (host != null && context != null) setGuestPage(String.valueOf(payload.get("option"))); }); return;
         }
@@ -685,6 +703,44 @@ public final class PartyModePlugin implements KioskPlugin {
         // Keep 0.1.12 installations working until the independent portal is configured.
         return saved.isEmpty() ? prefs.getString("dj_url", "") : saved;
     }
+    private void publishPartyPolicy(JSONObject policy) throws Exception {
+        String queue = activeQueue();
+        if (!queue.equals(policy.optString("queue_id"))) return;
+        String summary = policy.optBoolean("continuous") + ":" + policy.optString("auto_method") + ":" + policy.optInt("auto_count") + ":" + policy.optString("queue_option");
+        if (summary.equals(reportedPartyPolicy)) return;
+        host.publishSwitch("continuous", "Party: automatisk fortsættelse", policy.optBoolean("continuous"));
+        String method = policy.optString("auto_method");
+        host.publishSelect("auto_method", "Party: automatisk musik fra", new String[]{"Favoritnumre", "Samme stil (MA)", "AI-musikønske"}, "favorites".equals(method) ? "Favoritnumre" : "ai".equals(method) ? "AI-musikønske" : "Samme stil (MA)");
+        host.publishSelect("auto_count", "Party: antal automatiske numre", new String[]{"1", "2", "3", "4", "5"}, String.valueOf(policy.optInt("auto_count", 1)));
+        String placement = policy.optString("queue_option");
+        host.publishSelect("queue_placement", "Party: gæsternes køplacering", new String[]{"Sidst i køen", "Som næste", "Spil straks", "Erstat kommende"}, "next".equals(placement) ? "Som næste" : "play".equals(placement) ? "Spil straks" : "replace_next".equals(placement) ? "Erstat kommende" : "Sidst i køen");
+        reportedPartyPolicy = summary;
+    }
+    private void pollPartyPolicy() {
+        if (host == null || context == null || io == null || partyPolicyPending || activeQueue().isEmpty()) return;
+        if (context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).getString("guest_url", "").isEmpty()) return;
+        long now = SystemClock.elapsedRealtime();
+        if (now - partyPolicyLastPoll < 10000) return;
+        partyPolicyLastPoll = now; partyPolicyPending = true;
+        final String connection = guestConnection();
+        io.execute(() -> {
+            JSONObject result = null;
+            try { result = companionRequest(connection, "Party Guest", "/api/party-settings", null); } catch (Exception ignored) {}
+            final JSONObject policy = result;
+            main.post(() -> { partyPolicyPending = false; if (host != null && context != null && policy != null && connection.equals(guestConnection())) try { publishPartyPolicy(policy); } catch (Exception ignored) {} });
+        });
+    }
+    private void changePartyPolicy(JSONObject changes) throws Exception {
+        if (io == null) return;
+        changes.put("queue_id", activeQueue());
+        final String connection = guestConnection();
+        io.execute(() -> {
+            try {
+                JSONObject policy = companionRequest(connection, "Party Guest", "/api/party-settings", changes);
+                main.post(() -> { if (host != null && context != null && connection.equals(guestConnection())) try { publishPartyPolicy(policy); } catch (Exception ignored) {} });
+            } catch (Exception error) { main.post(() -> { if (host != null) host.status("Kontrollér Party Guest-forbindelsen og opdatér add-on til 0.2.0", true); }); }
+        });
+    }
     private void configureGuest() {
         Activity a = activeKioskActivity(); if (a == null) return;
         LinearLayout body = panelBody(a);
@@ -696,7 +752,7 @@ public final class PartyModePlugin implements KioskPlugin {
             String url = field.getText().toString().trim();
             if (!validDjUrl(url)) { field.setError("Angiv Party Guest-adressen fra ingress"); return; }
             context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit().putString("guest_url", url).apply();
-            syncGuestModes(); clearPartyGuests(); partyGuestLastPoll = 0; dismissSearch(); updateParty(); pollPartyGuests();
+            syncGuestModes(); clearPartyGuests(); partyGuestLastPoll = 0; partyPolicyLastPoll = 0; reportedPartyPolicy = ""; dismissSearch(); updateParty(); pollPartyGuests(); pollPartyPolicy();
         });
         openSheet(a, "Party Guest · forbindelse", body, false);
     }

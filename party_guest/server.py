@@ -10,14 +10,28 @@ from pathlib import Path
 from urllib.parse import urlsplit
 import requests
 from guests import Guests
+from continuation import Continuation, METHODS, PLACEMENTS, PLACEMENT_TEXT
 
 
 class Portal:
-    def __init__(self, options):
+    def __init__(self, options, policy_path=None):
         self.options = dict(options)
-        self.queue_lock = threading.Lock()
+        self.queue_lock = threading.RLock()
+        self.policy_lock = threading.RLock()
+        self.policy_path = policy_path
+        self.party_policy = {'queue_option': 'add', 'continuous': False, 'auto_method': 'similar', 'auto_count': 1, 'auto_prompt': ''}
+        if policy_path and policy_path.exists():
+            try:
+                stored = json.loads(policy_path.read_text())
+                # Runtime activation deliberately starts off after addon restart.
+                stored['continuous'] = False
+                self.validate_policy(stored)
+                self.party_policy.update(stored)
+            except (OSError, ValueError, TypeError):
+                pass
         self.guests = Guests(self)
         self.ai_cached = (0, False)
+        self.continuation = Continuation(self)
 
     def ha_get(self, path):
         response = requests.get('http://supervisor/core/api/' + path,
@@ -36,9 +50,93 @@ class Portal:
         except (requests.RequestException, ValueError, TypeError):
             return False
 
+    def guest_allowed(self):
+        return bool(self.options.get('guest_access', True)) and self.enabled('guest_access_entity')
+
+    @staticmethod
+    def validate_policy(data):
+        if set(data) - {'queue_option', 'continuous', 'auto_method', 'auto_count', 'auto_prompt'}:
+            raise ValueError('Ukendt Party-indstilling')
+        if 'queue_option' in data and data['queue_option'] not in PLACEMENTS:
+            raise ValueError('Ugyldig køplacering')
+        if 'continuous' in data and not isinstance(data['continuous'], bool):
+            raise ValueError('Vælg til eller fra')
+        if 'auto_method' in data and data['auto_method'] not in METHODS:
+            raise ValueError('Vælg Favoritter, Samme stil eller AI')
+        if 'auto_count' in data and (isinstance(data['auto_count'], bool) or not isinstance(data['auto_count'], int) or not 1 <= data['auto_count'] <= 5):
+            raise ValueError('Vælg 1–5 kommende automatiske numre')
+        if 'auto_prompt' in data and (not isinstance(data['auto_prompt'], str) or len(data['auto_prompt']) > 1000):
+            raise ValueError('Musikønsket må højst være 1000 tegn')
+
+    def policy(self):
+        with self.policy_lock:
+            result = dict(self.party_policy)
+        entity = self.options.get('continuous_entity', '')
+        if entity:
+            result['continuous'] = self.enabled('continuous_entity', False)
+        for option, key in [('auto_method_entity', 'auto_method'), ('auto_count_entity', 'auto_count'), ('queue_option_entity', 'queue_option')]:
+            entity = self.options.get(option, '')
+            if not entity:
+                continue
+            if not re.fullmatch(r'(input_select|select|input_number|number)\.[a-z0-9_]+', entity):
+                result['continuous'] = False
+                continue
+            try:
+                value = self.ha_get('states/' + entity)['state']
+                if key == 'auto_count':
+                    value = int(float(value))
+                self.validate_policy({key: value})
+                result[key] = value
+            except (requests.RequestException, ValueError, TypeError, KeyError):
+                result['continuous'] = False
+        return result
+
+    def change_policy(self, data):
+        if data.get('queue_id') != self.queue_id():
+            raise ValueError('Vælg samme MA-kø i Party Guest og Kiosk')
+        changes = {k: v for k, v in data.items() if k != 'queue_id'}
+        self.validate_policy(changes)
+        with self.queue_lock:
+            with self.policy_lock:
+                self.party_policy.update(changes)
+                if self.policy_path:
+                    tmp = self.policy_path.with_suffix('.tmp')
+                    tmp.write_text(json.dumps(self.party_policy))
+                    tmp.replace(self.policy_path)
+            self.continuation.changed()
+        return self.party_settings()
+
+    def party_settings(self):
+        return {'queue_id': self.queue_id(), **self.policy(), 'continuation': self.continuation.status()}
+
+    def guest_queue(self, queue, uris):
+        self.ma('player_queues/play_media', {'queue_id': queue, 'media': uris, 'option': self.policy()['queue_option']})
+        self.continuation.guest_added()
+
+    @staticmethod
+    def cover(media):
+        for image in (media.get('metadata') or {}).get('images', []):
+            path = image.get('path', '') if isinstance(image, dict) else ''
+            try:
+                parsed = urlsplit(path)
+                if parsed.scheme in {'http', 'https'} and parsed.hostname and not parsed.username:
+                    return path
+            except ValueError:
+                pass
+        return ''
+
+    def guest_config(self, token):
+        config = self.guests.config(token)
+        queue = self.queue_id()
+        snapshot = self.ma('player_queues/get', {'queue_id': queue})
+        items = self.ma('player_queues/items', {'queue_id': queue, 'offset': max(0, int(snapshot.get('current_index') or 0) - 1), 'limit': 50}) or []
+        policy = self.policy()
+        config.update(queue=[{'id': item.get('queue_item_id'), 'name': (item.get('media_item') or {}).get('name', ''),
+            'artists': (item.get('media_item') or {}).get('artists', []), 'image': self.cover(item.get('media_item') or {}), 'current': item.get('queue_item_id') == (snapshot.get('current_item') or {}).get('queue_item_id')} for item in items],
+            queue_option=policy['queue_option'], queue_help=PLACEMENT_TEXT[policy['queue_option']], continuous=policy['continuous'])
+        return config
+
     def queue_id(self):
-        if not self.options.get('guest_access', True) or not self.enabled('guest_access_entity'):
-            raise ValueError('Gæsteadgang er slået fra af værten')
         queue = self.options.get('queue_id', '').strip()
         if not queue:
             raise ValueError('Angiv queue_id eller MA-gruppens HA media_player i Party Guest')
@@ -103,6 +201,8 @@ class Portal:
         return self.ai_request('/api/jobs/' + key)
 
     def join(self):
+        if not self.guest_allowed():
+            raise ValueError('Gæsteadgang er slået fra af værten')
         queue = self.queue_id()
         with self.guests.lock:
             token = next((key for key, value in self.guests.sessions.items()
@@ -119,7 +219,7 @@ class Portal:
         kiosk = urlsplit(url)
         master = self.options.get('api_token', '')
         kiosk_url = kiosk.scheme + '://' + kiosk.netloc + '/#token=' + master if url and len(master) >= 24 else ''
-        return {'guest_url': url, 'kiosk_url': kiosk_url, 'modes': self.search_config(), 'guest_access': bool(self.options.get('guest_access', True)) and self.enabled('guest_access_entity')}
+        return {'guest_url': url, 'kiosk_url': kiosk_url, 'modes': self.search_config(), 'guest_access': self.guest_allowed(), 'party': self.party_settings()}
 
 
 def handler(portal, ingress=False):
@@ -172,13 +272,15 @@ def handler(portal, ingress=False):
                     return self.reply(200, portal.join())
                 if not post and path == '/api/admin/status' and host:
                     return self.reply(200, portal.status())
+                if path == '/api/party-settings' and host:
+                    return self.reply(200, portal.change_policy(self.body()) if post else portal.party_settings())
                 if post and path == '/api/guest-link' and host:
                     return self.reply(200, portal.guests.link(self.body()))
                 if ingress or path.startswith('/api/admin/') or not path.startswith('/api/guest/'):
                     return self.reply(403, {'error': 'Kun gæstefunktioner er tilgængelige'})
                 portal.guests.session(token)
                 if not post and path == '/api/guest/config':
-                    return self.reply(200, portal.guests.config(token))
+                    return self.reply(200, portal.guest_config(token))
                 if not post and path.startswith('/api/guest/jobs/'):
                     return self.reply(200, portal.guests.job(token, path.rsplit('/', 1)[1]))
                 if post and path == '/api/guest/search':
@@ -200,7 +302,8 @@ def handler(portal, ingress=False):
 
 
 if __name__ == '__main__':
-    portal = Portal(json.loads(Path('/data/options.json').read_text()))
+    portal = Portal(json.loads(Path('/data/options.json').read_text()), Path('/data/party-policy.json'))
+    portal.continuation.start_worker()
     api = ThreadingHTTPServer(('0.0.0.0', 8102), handler(portal))
     threading.Thread(target=api.serve_forever, daemon=True).start()
     ThreadingHTTPServer(('0.0.0.0', 8099), handler(portal, True)).serve_forever()

@@ -12,6 +12,8 @@ class Guests:
         self.lock = threading.RLock()
 
     def link(self, data):
+        if not getattr(self.dj, 'guest_allowed', lambda: True)():
+            raise ValueError('Gæsteadgang er slået fra af værten')
         queue = self.dj.queue_id()
         if data.get('queue_id') != queue:
             raise ValueError('Vælg samme MA-kø i gæsteserveren og Kiosk Party')
@@ -32,6 +34,8 @@ class Guests:
         return {'path': '/guest/#token=' + token}
 
     def session(self, token):
+        if not getattr(self.dj, 'guest_allowed', lambda: True)():
+            raise ValueError('Gæsteadgang er slået fra af værten')
         with self.lock:
             session = self.sessions.get(token)
             if session is None or session['expires'] <= time.monotonic():
@@ -114,7 +118,11 @@ class Guests:
                 raise ValueError('Vælg numre fra dine søgeresultater')
             if any(isinstance(i, bool) or not isinstance(i, int) or not 0 <= i < len(result['tracks']) or i in result['added'] for i in indices):
                 raise ValueError('Numrene er ugyldige eller allerede tilføjet')
-            self.dj.ma('player_queues/play_media', {'queue_id': session['queue'], 'media': [result['tracks'][i]['uri'] for i in indices], 'option': 'add'})
+            uris = [result['tracks'][i]['uri'] for i in indices]
+            if hasattr(self.dj, 'guest_queue'):
+                self.dj.guest_queue(session['queue'], uris)
+            else:
+                self.dj.ma('player_queues/play_media', {'queue_id': session['queue'], 'media': uris, 'option': 'add'})
             with self.lock:
                 session['jobs'][result['id']]['added'].update(indices)
             return {'queued': len(indices)}

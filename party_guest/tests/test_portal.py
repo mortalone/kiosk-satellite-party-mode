@@ -76,11 +76,11 @@ class PortalTest(unittest.TestCase):
         link = requests.get(base + '/api/guest/join')
         self.assertEqual(link.status_code, 200); self.assertNotIn('host-secret', link.text)
         headers = {'Authorization': 'Bearer ' + link.json()['path'].split('=')[1]}
-        self.portal.ma.return_value = {'current_item': {'media_item': self.track}}
+        self.portal.ma.side_effect = lambda command, args: [] if command == 'player_queues/items' else {'current_item': {'media_item': self.track}}
         self.assertEqual(requests.get(base + '/api/guest/config', headers=headers).status_code, 200)
-        for path in ['/api/admin/status', '/api/search-config', '/api/jobs/other']:
+        for path in ['/api/admin/status', '/api/search-config', '/api/jobs/other', '/api/party-settings']:
             self.assertEqual(requests.get(base + path, headers=headers).status_code, 403)
-        for path in ['/api/guest-link', '/api/queue', '/api/suggest']:
+        for path in ['/api/guest-link', '/api/queue', '/api/suggest', '/api/party-settings']:
             self.assertEqual(requests.post(base + path, headers=headers, json={}).status_code, 403)
         host = {'Authorization': 'Bearer ' + self.portal.options['api_token']}
         status = requests.get(base + '/api/admin/status', headers=host).json()
@@ -95,7 +95,6 @@ class PortalTest(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         self.assertNotIn('from dj import', (root / 'party_guest/server.py').read_text())
         self.assertEqual((root / 'party_guest/guests.py').read_bytes(), (root / 'ai_dj/guests.py').read_bytes())
-        self.assertEqual((root / 'party_guest/guest.html').read_bytes(), (root / 'ai_dj/guest.html').read_bytes())
 
 
 if __name__ == '__main__': unittest.main()
