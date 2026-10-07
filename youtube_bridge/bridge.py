@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import shutil
+import signal
 import sqlite3
 import sys
 import tempfile
@@ -24,7 +25,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 
 LOG = logging.getLogger("youtube_bridge")
 VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
-VERSION = "0.1.2"
+VERSION = "0.1.3"
 
 
 class BridgeError(Exception):
@@ -87,6 +88,8 @@ class Bridge:
         self.jobs = asyncio.Semaphore(2)
         self.search_cache: dict[str, tuple[float, list[dict]]] = {}
         self.audio_tasks: dict[str, asyncio.Task] = {}
+        self.background_audio: set[str] = set()
+        self.foreground_audio: dict[str, int] = {}
         self.lyrics_tasks: dict[tuple[str, bool], asyncio.Task] = {}
         self.lyrics_wait_seconds = 8
         # Pinned files cannot be evicted while being served to MA.
@@ -167,12 +170,16 @@ class Bridge:
         if cookies.exists():
             base += ["--cookies", str(cookies)]
         async with self.jobs:
-            proc = await asyncio.create_subprocess_exec(*base, *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            proc = await asyncio.create_subprocess_exec(*base, *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                                                        start_new_session=True)
             try:
                 stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout)
             except BaseException:
                 if proc.returncode is None:
-                    proc.kill()
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
                 await proc.wait()
                 raise
         if proc.returncode:
@@ -333,18 +340,54 @@ class Bridge:
             os.utime(target, None)
             return target
 
-    async def audio(self, item_id: str) -> Path:
+    async def cancel_prefetch(self, keep: set[str]):
+        tasks = []
+        for key in list(self.background_audio):
+            if key in keep or self.foreground_audio.get(key):
+                continue
+            if task := self.audio_tasks.get(key):
+                task.cancel()
+                tasks.append(task)
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def audio(self, item_id: str, prefetch: bool = False) -> Path:
+        if not prefetch and VIDEO_ID.fullmatch(item_id) and (self.cache / (item_id + ".mp3")).is_file():
+            # Normal playback/Range reads of cached audio must not interrupt preloading.
+            return await self._audio(item_id, False)
+        if not prefetch:
+            self.foreground_audio[item_id] = self.foreground_audio.get(item_id, 0) + 1
+            try:
+                # Reuse an in-flight download for this track; cancel other background work.
+                await self.cancel_prefetch(keep={item_id})
+                return await self._audio(item_id, False)
+            finally:
+                self.foreground_audio[item_id] -= 1
+                if not self.foreground_audio[item_id]:
+                    self.foreground_audio.pop(item_id)
+        return await self._audio(item_id, True)
+
+    async def _audio(self, item_id: str, prefetch: bool) -> Path:
         await self.detail(item_id)
         path = self.cache / (item_id + ".mp3")
         if path.exists():
             os.utime(path, None)
             return path
         task = self.audio_tasks.get(item_id)
+        if task is not None and task.cancelling():
+            await asyncio.gather(task, return_exceptions=True)
+            task = self.audio_tasks.get(item_id)
         if task is None:
+            if prefetch and self.foreground_audio:
+                raise BridgeError("Foreground audio has priority")
             task = asyncio.create_task(self.generate(item_id))
             self.audio_tasks[item_id] = task
+            if prefetch:
+                self.background_audio.add(item_id)
             def done(completed):
-                self.audio_tasks.pop(item_id, None)
+                if self.audio_tasks.get(item_id) is completed:
+                    self.audio_tasks.pop(item_id, None)
+                    self.background_audio.discard(item_id)
                 if not completed.cancelled():
                     completed.exception()  # retrieve errors when HTTP requester disconnected
             task.add_done_callback(done)
@@ -604,11 +647,16 @@ def make_app(bridge: Bridge, ui: bool = False) -> FastAPI:
         @app.get("/catalog")
         async def catalog():
             return {"tracks": bridge.tracks(saved=True), "username": bridge.username, "version": VERSION}
+        @app.get("/prefetch-status")
+        async def prefetch_status():
+            watcher = getattr(bridge, "prefetch", None)
+            return watcher.snapshot() if watcher else {"enabled": False, "configured": False, "state": "disabled"}
     return app
 
 
 async def main():
     import uvicorn
+    from queue_prefetch import QueuePrefetch
     options = load_options()
     if len(str(options.get("password", ""))) < 8:
         raise SystemExit("Set a bridge password of at least 8 characters in the addon configuration before starting.")
@@ -618,10 +666,16 @@ async def main():
         if path.is_dir():
             shutil.rmtree(path)
     await bridge.prune()
+    bridge.prefetch = QueuePrefetch(bridge)
+    watcher = asyncio.create_task(bridge.prefetch.run())
     LOG.info("YouTube Bridge %s: MA source port 8102; Home Assistant ingress port 8099", VERSION)
     servers = [uvicorn.Server(uvicorn.Config(make_app(bridge), host="0.0.0.0", port=8102, access_log=False)),
                uvicorn.Server(uvicorn.Config(make_app(bridge, ui=True), host="0.0.0.0", port=8099, access_log=False))]
-    await asyncio.gather(*(s.serve() for s in servers))
+    try:
+        await asyncio.gather(*(s.serve() for s in servers))
+    finally:
+        watcher.cancel()
+        await asyncio.gather(watcher, return_exceptions=True)
 
 
 if __name__ == "__main__":
