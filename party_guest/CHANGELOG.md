@@ -1,3 +1,10 @@
+## 0.2.4
+
+- Show a short explanation of the per-track ≈ recommendation button when enabled.
+- Make playback bars visibly change height; use a gentler animation with reduced-motion settings and stop on pause.
+- Return completed MA search results directly, removing a separate job-fetch request; keep AI polling unchanged.
+- Browser tests sample actual bar movement, paused/reduced-motion behavior, legend visibility and the shorter search path.
+
 ## 0.2.3
 
 - Normal search includes the MA library and connected catalogs such as Spotify, instead of restricting results to saved library tracks. Rename the tab to Søg and explain its scope.

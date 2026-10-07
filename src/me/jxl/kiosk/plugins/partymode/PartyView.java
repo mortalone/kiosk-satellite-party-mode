@@ -38,6 +38,8 @@ final class PartyView extends FrameLayout {
     private String effect = "off";
     private boolean queueVisible = true;
     private Bitmap guestQr;
+    private String guestQrSize = "Small";
+    private float guestQrSide;
     private String guestText = "", guestStatus = "";
     private final PartyEffects effects = new PartyEffects();
     private boolean framePending;
@@ -138,6 +140,9 @@ final class PartyView extends FrameLayout {
         if (!next.equals(this.effect) || this.queueVisible != queueVisible) dirtyQueue();
         this.effect = next; this.queueVisible = queueVisible; requestFrame();
     }
+    void setGuestQrSize(String size) {
+        if (!guestQrSize.equals(size)) { guestQrSize = size; dirtyQueue(); requestFrame(); }
+    }
     void setGuests(Bitmap qr, String caption, String status) {
         if (guestQr != qr || !guestText.equals(caption) || !guestStatus.equals(status)) { guestQr = qr; guestText = caption; guestStatus = status; dirtyQueue(); requestFrame(); }
     }
@@ -187,20 +192,31 @@ final class PartyView extends FrameLayout {
         float areaLeft = 0, areaTop = 0, areaWidth = getWidth(), areaHeight = getHeight();
         if (fullscreen && guestQr != null && !PartySignal.lyrics(effect)) {
             boolean landscape = getWidth() >= getHeight();
-            float side = Math.min(getWidth() * (landscape ? 0.27f : 0.46f), getHeight() * (landscape ? 0.55f : 0.26f));
-            float x = landscape ? Math.max(16 * density, getWidth() * 0.035f) : (getWidth() - side) / 2;
-            float y = landscape ? (getHeight() - side) / 2 - 18 * density : 64 * density;
+            float factor = "Large".equals(guestQrSize) ? 1.65f : "Medium".equals(guestQrSize) ? 1.3f : 1f;
+            float side = Math.min(getWidth() * (landscape ? 0.13f : 0.28f), getHeight() * (landscape ? 0.25f : 0.17f)) * factor;
+            guestQrSide = side;
+            float x = landscape ? Math.max(22 * density, getWidth() * 0.035f) : (getWidth() - side) / 2;
+            float y = landscape ? (getHeight() - side) / 2 - 10 * density : 88 * density;
+            // A compact card in the queue's palette; preserve the QR quiet zone.
+            rect.set(x - 14 * density, y - 36 * density, x + side + 14 * density, y + side + 43 * density);
+            paint.setAlpha(255); paint.setColor(0xD918262D);
+            canvas.drawRoundRect(rect, 16 * density, 16 * density, paint);
+            paint.setColor(0x445D7B83); paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(density);
+            canvas.drawRoundRect(rect, 16 * density, 16 * density, paint); paint.setStyle(Paint.Style.FILL);
+            line(canvas, "MUSIKØNSKER", x, y - 14 * density, side, 11 * sp, true, PartyUi.ACCENT);
             rect.set(x, y, x + side, y + side);
-            paint.setAlpha(255); paint.setFilterBitmap(false);
-            canvas.drawBitmap(guestQr, null, rect, paint);
+            canvas.save(); clip.reset();
+            clip.addRoundRect(rect, Math.min(6 * density, side * 0.025f), Math.min(6 * density, side * 0.025f), Path.Direction.CW);
+            canvas.clipPath(clip); paint.setAlpha(255); paint.setFilterBitmap(false);
+            canvas.drawBitmap(guestQr, null, rect, paint); canvas.restore();
             paint.setFilterBitmap(true);
-            line(canvas, guestText, x, y + side + 25 * density,
-                    Math.max(side, getWidth() * 0.30f), 14 * sp, false, Color.WHITE);
+            line(canvas, guestText.isEmpty() ? "Scan og vælg musik" : guestText, x, y + side + 24 * density,
+                    side, 12 * sp, false, PartyUi.MUTED);
             if (landscape) {
-                areaLeft = x + side + 24 * density;
+                areaLeft = x + side + 38 * density;
                 areaWidth = getWidth() - areaLeft;
             } else {
-                areaTop = y + side + 44 * density;
+                areaTop = y + side + 57 * density;
                 areaHeight = getHeight() - areaTop;
             }
         }

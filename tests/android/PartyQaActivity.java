@@ -30,6 +30,9 @@ public final class PartyQaActivity extends Activity {
             String mode = intent.getStringExtra("mode");
             try {
                 call("dismissSearch");
+                if ("qrsmall".equals(mode) || "qrlarge".equals(mode)) {
+                    call("setGuestQrSize", String.class, "qrsmall".equals(mode) ? "Small" : "Large");
+                }
                 if ("search".equals(mode) || "placement".equals(mode) || "ai".equals(mode) || "similar".equals(mode)) {
                     call("showSearch"); Dialog dialog = (Dialog)field("searchDialog");
                     if ("ai".equals(mode) && findText(dialog.getWindow().getDecorView(), "AI DJ") == null) throw new AssertionError("AI tab absent");
@@ -100,6 +103,17 @@ public final class PartyQaActivity extends Activity {
                     if (view == null) throw new AssertionError("Party root missing");
                     if ("main".equals(mode) && (!switches.containsKey("search_ai") || !switches.containsKey("search_similar") || !switches.containsKey("search_library") || !switches.containsKey("current_similar"))) throw new AssertionError("search switches absent");
                     if ("main".equals(mode)) { try { Field buttons=PartyView.class.getDeclaredField("similarRects"); buttons.setAccessible(true); if (((java.util.List<?>)buttons.get(view)).isEmpty()) throw new AssertionError("queue similarity buttons absent"); } catch (ReflectiveOperationException e) { throw new RuntimeException(e); } }
+                    if ("qrsmall".equals(mode) || "qrlarge".equals(mode)) {
+                        try {
+                            Field sideField=PartyView.class.getDeclaredField("guestQrSide");sideField.setAccessible(true);
+                            float side=sideField.getFloat(view);
+                            String size="qrsmall".equals(mode)?"Small":"Large";
+                            float base=Math.min(view.getWidth()*.13f,view.getHeight()*.25f);
+                            if (Math.abs(side-base*("Large".equals(size)?1.65f:1f))>1) throw new AssertionError("QR size layout incorrect");
+                            Field pf=PartyModePlugin.class.getDeclaredField("PARTY_PREFS");pf.setAccessible(true);
+                            if (!size.equals(field("guestQrSize")) || !size.equals(getSharedPreferences((String)pf.get(null),MODE_PRIVATE).getString("guest_qr_size", ""))) throw new AssertionError("QR size not saved");
+                        } catch (ReflectiveOperationException e) {throw new RuntimeException(e);}
+                    }
                     if ("main".equals(mode) && field("partyQr") == null) throw new AssertionError("MA guest QR absent");
                     if ("main".equals(mode) && hasDescription(getWindow().getDecorView(), "Afslut Party Mode")) throw new AssertionError("default Close visible");
                     if ("settings".equals(mode) && !hasText(((Dialog)field("searchDialog")).getWindow().getDecorView(), "VISUALISERING")) throw new AssertionError("new menu missing");

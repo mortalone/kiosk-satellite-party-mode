@@ -116,6 +116,7 @@ public final class PartyModePlugin implements KioskPlugin {
     private long guestStateLastPoll, guestAccessRevision;
     private String reportedPartyEffect;
     private String reportedSearchModes = "";
+    private String guestQrSize = "Small";
     private String guestPage = "Music Assistant", reportedGuestPage = "", reportedMenuCategories = "";
     private final String[] menuKeys = {"visuals", "music", "screen", "guests", "sound", "diagnostics"};
     private final String[] menuNames = {"Visualisering", "Musik og AI-forbindelse", "Skærm og betjening", "Gæster og QR", "Lyd og EQ", "Grafik og status"};
@@ -223,6 +224,7 @@ public final class PartyModePlugin implements KioskPlugin {
         showPlayback = Boolean.parseBoolean(savedChoice(prefs, "playback_visible", String.valueOf(!Boolean.FALSE.equals(settings.get("showPlaybackControls")))));
         partyQueueVisible = Boolean.parseBoolean(prefs.getString("queue_visible", "true"));
         guestPage = prefs.getString("guest_page", "Music Assistant");
+        guestQrSize = prefs.getString("guest_qr_size", "Small");
         menuCategories.clear();
         for (String key : menuKeys) if (prefs.getBoolean("menu_" + key, true)) menuCategories.add(key);
         partyGuestsFollow = Boolean.parseBoolean(savedChoice(prefs, "guests_follow", String.valueOf(!Boolean.FALSE.equals(settings.get("showGuestQr")))));
@@ -1249,9 +1251,16 @@ public final class PartyModePlugin implements KioskPlugin {
         context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit().putString("queue_visible", String.valueOf(visible)).apply();
         if (partyView != null) partyView.setPresentation(partyEffect, partyQueueVisible);
     }
+    private void setGuestQrSize(String size) {
+        if (!"Small".equals(size) && !"Medium".equals(size) && !"Large".equals(size)) return;
+        guestQrSize = size;
+        context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit().putString("guest_qr_size", size).apply();
+        updateParty();
+    }
     private void updateParty() {
         if (!partyFullscreen || partyView == null) return;
         updatePlayerControls();
+        partyView.setGuestQrSize(guestQrSize);
         partyView.setGuests(partyGuestsFollow ? partyQr : null, partyGuestText, partyGuestsFollow ? partyGuestStatus : "");
         if (partyGuestsFollow && !partyGuestStatus.isEmpty() && !partyGuestStatus.equals(reportedGuestStatus)) {
             reportedGuestStatus = partyGuestStatus; host.status(partyGuestStatus, false);
@@ -1325,6 +1334,9 @@ public final class PartyModePlugin implements KioskPlugin {
         if (menuCategories.contains("guests")) {
             panelHeading(rows, "GÆSTER");
             addPanelAction(rows, "Vis gæste-QR", partyGuestsFollow, () -> { setPartyGuests(!partyGuestsFollow); showPartyMenu(anchor); });
+            addPanelAction(rows, "QR-størrelse · lille", "Small".equals(guestQrSize), () -> { setGuestQrSize("Small"); showPartyMenu(anchor); });
+            addPanelAction(rows, "QR-størrelse · mellem", "Medium".equals(guestQrSize), () -> { setGuestQrSize("Medium"); showPartyMenu(anchor); });
+            addPanelAction(rows, "QR-størrelse · stor", "Large".equals(guestQrSize), () -> { setGuestQrSize("Large"); showPartyMenu(anchor); });
             addPanelAction(rows, "Aktivér gæsteadgang i MA", false, () -> changePartyGuestAccess(true));
             addPanelAction(rows, "Deaktivér gæsteadgang i MA", false, () -> changePartyGuestAccess(false));
             addPanelAction(rows, "Party Guest · opsæt adresse", false, this::configureGuest);

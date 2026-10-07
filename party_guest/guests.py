@@ -91,7 +91,9 @@ class Guests:
             result = {'id': secrets.token_urlsafe(16), 'state': 'ready', 'tracks': self.valid_tracks(tracks), 'progress': ''}
         with self.lock:
             session['jobs'][result['id']] = {'created': now, 'added': set(), 'mode': mode, 'result': result if mode != 'ai' else None}
-        return {'id': result['id']}
+        # MA searches are already finished; return them in the first response.
+        # AI still uses its asynchronous job and permission-checked polling.
+        return {'id': result['id']} if mode == 'ai' else {**result, 'added': []}
 
     def reference(self, token, session, data):
         # Accept only a row from this queue or this guest's verified search job.

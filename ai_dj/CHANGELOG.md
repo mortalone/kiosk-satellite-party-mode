@@ -1,3 +1,7 @@
+## 0.1.9
+
+- Return ready guest MA search results directly alongside the retained job ID; compatible with existing guest clients.
+
 ## 0.1.8
 
 - Include the library and connected catalogs in normal guest search; keep Similar restricted to Sonic Similarity.

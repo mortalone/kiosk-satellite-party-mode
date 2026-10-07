@@ -1,3 +1,9 @@
+## 0.1.15
+
+- Make the guest QR about half its previous default width and integrate it into a compact dark card with a teal heading and muted caption.
+- Offer persisted Small / Medium / Large QR sizes under Party menu → Guests, preserving the scan contrast and quiet zone.
+- Party Guest 0.2.4 explains per-track ≈ recommendations, uses gentle moving playback bars with reduced-motion settings, and returns ready MA searches without a second fetch.
+
 ## Party Guest 0.2.1 · AI DJ 0.1.7 · Party Mode 0.1.14
 
 - Fix the real-MA guest boot crash caused by null metadata images. Missing artist lists and artwork are handled safely.
