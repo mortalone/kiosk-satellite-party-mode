@@ -122,7 +122,7 @@ Party Mode 0.1.11 brings Library, Similarity and AI DJ into one native search sh
 
 Configure the existing addon's address and token only in the settings menu. The separate DJ button and alternative AI-addon QR are retired. Guest QR always opens the existing MA Party guest page. A short explanation appears when its QR cannot be obtained.
 
-[Music Assistant 2.10.5 with Party AI DJ](ma_ai_dj/README.md) is an experimental replacement HA add-on with AI search in that same guest page and a search dialog in desktop Party mode. Import the stopped existing MA server’s data before starting it; retain the original add-on and backup. It is not injected into stock MA by updating this repository. The separate Party AI DJ engine must be updated to 0.1.3.
+**Keep the official Music Assistant release.** Party AI DJ is a separate HA add-on that uses MA's API; the Kiosk Party plugin can use it without replacing MA. The [native MA integration source](ma_ai_dj/README.md) is development code only. It cannot be installed as an external plugin in stock MA 2.10.5 and does not change its desktop or guest search. The replacement MA add-on has been withdrawn; no data migration is required for the supported companion approach.
 
 ## 0.1.10: Guest switches for Home Assistant
 

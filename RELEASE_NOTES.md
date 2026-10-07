@@ -1,3 +1,10 @@
+## Correction: retain official Music Assistant
+
+- Withdraws the replacement MA add-on and its data migration instructions.
+- Keeps Party AI DJ 0.1.3 as an independent HA companion to the official MA API.
+- Native MA provider/frontend changes remain development source only; stock MA 2.10.5 cannot install them as an external plugin from this repository.
+- No user's running HA/MA installation has been changed.
+
 ## Native MA Party AI DJ — 2.10.5-dj.1
 
 - Adds an experimental replacement MA 2.10.5 HA add-on with an explicit, atomic import of existing data and a port conflict guard.
