@@ -21,6 +21,7 @@ class PortalTest(unittest.TestCase):
             modes = self.portal.search_config()
             self.assertTrue(modes['library']); self.assertTrue(modes['similar']); self.assertFalse(modes['ai'])
             result = self.portal.guests.search(self.token, {'mode': 'library', 'query': 'Jazz'})
+            self.portal.ma.assert_called_with('music/search', {'search_query': 'Jazz', 'media_types': ['track'], 'limit': 12, 'providers': ['library']})
             self.portal.guests.enqueue(self.token, {'id': result['id'], 'indices': [0], 'option': 'replace', 'queue_id': 'other'})
             self.portal.ma.assert_called_with('player_queues/play_media', {'queue_id': 'group', 'media': ['library://track/7'], 'option': 'add'})
             with self.assertRaises(ValueError):

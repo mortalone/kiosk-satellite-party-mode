@@ -70,6 +70,12 @@ class ContinuationTest(unittest.TestCase):
         self.assertEqual(len(self.calls), 6)
         self.assertTrue(all(a != b for a,b in zip(played, played[1:])))
 
+    def test_favorite_pool_is_not_truncated_to_guest_result_limit(self):
+        self.pool = [track(i) for i in range(1, 21)]
+        self.fill.history.extend(t['uri'] for t in self.pool[:-1])
+        self.fill.tick(100)
+        self.assertEqual(self.calls[0]['media'], ['library://track/20'])
+
     def test_ai_prefetch_cancelled_by_guest_and_policy_changes(self):
         self.portal.party_policy.update(auto_method='ai', auto_prompt='rolig soul')
         self.portal.ai_available = Mock(return_value=True)

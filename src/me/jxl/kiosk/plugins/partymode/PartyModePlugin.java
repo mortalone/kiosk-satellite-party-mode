@@ -161,7 +161,7 @@ public final class PartyModePlugin implements KioskPlugin {
             context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit()
                     .putBoolean("party_fullscreen", false).putLong("party_until_ms", 0).apply();
             context.sendBroadcast(new Intent(PARTY_EVENT).setPackage(context.getPackageName()));
-            reportedPartyPolicy = ""; partyPolicyLastPoll = 0; reportedGuestPage = ""; reportedMenuCategories = ""; reportedSearchModes = ""; reportedPartyState = null; reportedPartyEffect = null; reportedGuestAccess = null; reportedGuestQr = null; guestAccessState = null; guestAccessQueue = ""; guestStateLastPoll = 0; publishPartyState();
+            reportedPartyPolicy = ""; partyPolicyLastPoll = 0; partyPolicyPending = false; reportedGuestPage = ""; reportedMenuCategories = ""; reportedSearchModes = ""; reportedPartyState = null; reportedPartyEffect = null; reportedGuestAccess = null; reportedGuestQr = null; guestAccessState = null; guestAccessQueue = ""; guestStateLastPoll = 0; publishPartyState();
             configureOnMain(settings);
             readKioskMusicAssistantConfig();
             host.executeCommand("getDashboardState", Collections.emptyMap(), (ok, data, error) -> {

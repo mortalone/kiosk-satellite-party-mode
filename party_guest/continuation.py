@@ -124,11 +124,12 @@ class Continuation:
             # Keep precomputed candidates ready, but do not add while the target is full.
             if remaining >= target:
                 return
-            candidates = [track for track in self.portal.guests.valid_tracks(pending['tracks'])
+            valid = self.valid_candidates(pending['tracks'])
+            candidates = [track for track in valid
                           if track['uri'] not in existing and track['uri'] not in self.history]
             # A provider may return a finite pool: cycle once eligible candidates played.
             if not candidates and method in {'favorites', 'similar'}:
-                candidates = [track for track in self.portal.guests.valid_tracks(pending['tracks']) if track['uri'] not in existing]
+                candidates = [track for track in valid if track['uri'] not in existing]
                 if candidates:
                     self.history.clear()
             seen = set()
@@ -162,6 +163,12 @@ class Continuation:
                     self.pending = None
                     self.after = now + 60
                     self.info['status'] = str(error)[:220]
+
+    def valid_candidates(self, tracks):
+        if not isinstance(tracks, list):
+            return []
+        return [track for offset in range(0, min(len(tracks), 200), 12)
+                for track in self.portal.guests.valid_tracks(tracks[offset:offset+12])]
 
     @staticmethod
     def exclusion(track):
