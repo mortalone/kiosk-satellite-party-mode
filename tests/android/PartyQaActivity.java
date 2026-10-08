@@ -43,7 +43,7 @@ public final class PartyQaActivity extends Activity {
                 if ("dsppreset".equals(mode)) {
                     plugin.execute("hide", Collections.emptyMap());
                     main.postDelayed(() -> plugin.onEvent("select.dsp_preset", Collections.singletonMap("option", "MA · Testbas")), 400);
-                    main.postDelayed(() -> plugin.execute("show", Collections.emptyMap()), 1600);
+                    main.postDelayed(() -> plugin.execute("show", Collections.emptyMap()), 1100);
                 } else if ("dspoff".equals(mode)) plugin.onEvent("switch.dsp_enabled", Collections.singletonMap("on", false));
                 else if ("dsprestore".equals(mode)) plugin.onEvent("select.dsp_preset", Collections.singletonMap("option", PartyDsp.RESTORE));
                 if ("search".equals(mode) || "placement".equals(mode) || "ai".equals(mode) || "similar".equals(mode)) {
