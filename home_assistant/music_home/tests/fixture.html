@@ -2,7 +2,7 @@
 window.calls=[];window.failLibrary=false;window.delays={};window.responses=[];
 const lists={playlist:['Sweet1','Nice1','Sommer 2026','Danske favoritter','Klassisk','Ro i huset','Restaurant','Comfy'],album:['Nattens puls','Aftenlys','Klassisk rock','Maison','Stjernestøv','Sommer i haven'],track:['Maison','Aftenlys','En stemme','Sikke en sang'],artist:['The Minds of 99','Norah Jones','Edith Piaf','R.E.M.'],radio:['Radio med James Bay','Radio med The Minds of 99'],podcast:[],audiobook:[]};
 function item(type,name,i){return {media_type:type,uri:`library://${type}/${i}`,name,image:`/cover/${i+(type==='album'?4:type==='track'?8:0)}`,artists:type==='track'||type==='album'?[{name:i===0?'Lucie':'The Minds of 99'}]:null};}
-window.testHass={states:{'media_player.stueetagen_ma':{entity_id:'media_player.stueetagen_ma',state:'playing',attributes:{friendly_name:'Stueetagen',mass_player_id:'qa-group',media_title:'Maison',media_artist:'Emilio Piano · Lucie',entity_picture:'/cover/10',volume_level:.1}}},
+window.testHass={states:{'media_player.stueetagen_ma':{entity_id:'media_player.stueetagen_ma',state:'playing',attributes:{friendly_name:'Stueetagen',mass_player_type:'group',media_title:'Maison',media_artist:'Emilio Piano · Lucie',entity_picture:'/cover/10',volume_level:.1}}},
  callService:async(domain,service,data)=>{calls.push({domain,service,data});},
  callWS:async(msg)=>{calls.push(msg);if(msg.type==='config/entity_registry/get')return {platform:'music_assistant',config_entry_id:'ma-fixture'};
   if(msg.type==='media_player/browse_media')return {children:['Maison','Aftenlys','En stemme'].map((name,i)=>({title:name,media_content_id:`library://track/${i}`,media_content_type:'track',thumbnail:`/cover/${i+8}`,can_play:true,can_expand:false}))};

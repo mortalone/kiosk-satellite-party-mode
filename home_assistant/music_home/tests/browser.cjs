@@ -1,9 +1,9 @@
 const {chromium}=require('playwright');
 const {spawn}=require('child_process');
 const assert=require('assert');const fs=require('fs');
-(async()=>{const server=spawn('python3',['home_assistant/music_home/tests/fixture.py'],{stdio:'inherit'});let browser;try{
+(async()=>{const server=spawn('python3',['home_assistant/music_home/tests/fixture.py'],{stdio:'inherit'});let browser,page;try{
  for(let i=0;i<40;i++){try{if((await fetch('http://127.0.0.1:18104/')).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
- browser=await chromium.launch({headless:true,args:['--no-sandbox']});const page=await browser.newPage({viewport:{width:720,height:1280}});const errors=[];page.on('pageerror',e=>errors.push(String(e)));await page.goto('http://127.0.0.1:18104/');await page.getByText('Dine playlister',{exact:true}).waitFor();
+ browser=await chromium.launch({headless:true,args:['--no-sandbox']});page=await browser.newPage({viewport:{width:720,height:1280}});const errors=[];page.on('pageerror',e=>errors.push(String(e)));await page.goto('http://127.0.0.1:18104/');await page.getByText('Dine playlister',{exact:true}).waitFor();
  assert.equal(await page.locator('.shortcut').count(),8);assert.equal(await page.evaluate(()=>calls.filter(x=>x.service==='play_media').length),0,'Never auto-play');
  assert.equal(await page.locator('.volume').isVisible(),false);assert.equal(await page.locator('.app-link').getAttribute('href'),'app://com.spotify.music');
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'No page horizontal overflow');
@@ -32,4 +32,4 @@ const assert=require('assert');const fs=require('fs');
  await page.evaluate(()=>card.setConfig({entity:'media_player.stueetagen_ma',name:'Musik igen'}));await page.getByText('Dine playlister',{exact:true}).waitFor();assert.equal(await page.locator('.player strong').textContent(),'Maison');
  const before=await page.evaluate(()=>calls.filter(x=>x.service==='media_next_track').length);await page.getByRole('button',{name:'Næste nummer'}).click();assert.equal(await page.evaluate(()=>calls.filter(x=>x.service==='media_next_track').length),before+1);
  assert.deepEqual(errors,[]);console.log('Music Home browser checks passed: read-only startup, MA schemas, navigation, playback placement, responsive views, escaping, stale search and HA push handling. Mock HA/MA, not live speakers.');
-}finally{await browser?.close();server.kill();}})().catch(e=>{console.error(e);process.exit(1);});
+}catch(e){if(page)console.log('MUSIC_QA_DEBUG '+JSON.stringify(await page.evaluate(()=>({calls:calls.slice(-15),content:card.shadowRoot.querySelector('main').textContent,view:card._view,request:card._request}))));throw e;}finally{await browser?.close();server.kill();}})().catch(e=>{console.error(e);process.exit(1);});
