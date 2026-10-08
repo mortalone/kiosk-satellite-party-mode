@@ -1,0 +1,16 @@
+<!doctype html><html lang="da"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Music Home · Test</title><style>body{margin:0;background:#111214;font-family:Arial}.ha-header{height:56px;display:flex;align-items:center;padding:0 20px;color:#c6c6c6;box-sizing:border-box;background:#191a1d;font-size:14px}music-home-card{display:block}</style><div class="ha-header">☰　 Musik i huset</div><music-home-card></music-home-card><script src="/music-home-card.js"></script><script>
+window.calls=[];window.failLibrary=false;window.delays={};window.responses=[];
+const lists={playlist:['Sweet1','Nice1','Sommer 2026','Danske favoritter','Klassisk','Ro i huset','Restaurant','Comfy'],album:['Nattens puls','Aftenlys','Klassisk rock','Maison','Stjernestøv','Sommer i haven'],track:['Maison','Aftenlys','En stemme','Sikke en sang'],artist:['The Minds of 99','Norah Jones','Edith Piaf','R.E.M.'],radio:['Radio med James Bay','Radio med The Minds of 99'],podcast:[],audiobook:[]};
+function item(type,name,i){return {media_type:type,uri:`library://${type}/${i}`,name,image:`/cover/${i+(type==='album'?4:type==='track'?8:0)}`,artists:type==='track'||type==='album'?[{name:i===0?'Lucie':'The Minds of 99'}]:null};}
+window.testHass={states:{'media_player.stueetagen_ma':{entity_id:'media_player.stueetagen_ma',state:'playing',attributes:{friendly_name:'Stueetagen',mass_player_id:'qa-group',media_title:'Maison',media_artist:'Emilio Piano · Lucie',entity_picture:'/cover/10',volume_level:.1}}},
+ callService:async(domain,service,data)=>{calls.push({domain,service,data});},
+ callWS:async(msg)=>{calls.push(msg);if(msg.type==='config/entity_registry/get')return {platform:'music_assistant',config_entry_id:'ma-fixture'};
+  if(msg.type==='media_player/browse_media')return {children:['Maison','Aftenlys','En stemme'].map((name,i)=>({title:name,media_content_id:`library://track/${i}`,media_content_type:'track',thumbnail:`/cover/${i+8}`,can_play:true,can_expand:false}))};
+  if(msg.type!=='call_service')throw Error('Unknown websocket request');
+  const d=msg.service_data;if(msg.service==='get_library'){if(failLibrary)throw Error('MA er offline');if(d.config_entry_id!=='ma-fixture')throw Error('Wrong MA instance');const items=(lists[d.media_type]??[]).map((name,i)=>item(d.media_type,name,i));return {response:{items:items.slice(d.offset??0,(d.offset??0)+(d.limit??20))}};}
+  if(msg.service==='search'){if(delays[d.name])await new Promise(r=>setTimeout(r,delays[d.name]));return {response:{tracks:[item('track',d.name,0)],albums:[item('album','Maison',4)],playlists:[item('playlist','Sweet1',0)],artists:[],radio:[],podcasts:[],audiobooks:[]}};}
+  if(msg.service==='play_media'){if(d.entity_id!=='media_player.stueetagen_ma'||!d.media_id.startsWith('library://'))throw Error('Wrong playback target');return {};}
+  throw Error('Unknown MA service');
+ }};
+const card=document.querySelector('music-home-card');card.setConfig({entity:'media_player.stueetagen_ma',name:'Musik i huset',height:'calc(100dvh - 56px)',spotify_app:true});card.hass=testHass;window.card=card;
+</script></html>

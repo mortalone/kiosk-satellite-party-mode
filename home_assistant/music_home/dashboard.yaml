@@ -1,0 +1,12 @@
+# Replace the example entity with Music Assistant's entity for Stueetagen.
+views:
+  - title: Musik
+    path: musik
+    icon: mdi:music
+    type: panel
+    cards:
+      - type: custom:music-home-card
+        entity: media_player.stueetagen
+        name: Musik i huset
+        start_view: home
+        spotify_app: true

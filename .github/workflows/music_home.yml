@@ -1,0 +1,46 @@
+name: Test and release Music Home card
+on:
+  push:
+    branches: [main]
+    paths: ["home_assistant/music_home/**", ".github/workflows/music_home.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: music-home-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check syntax
+        run: node --check home_assistant/music_home/music-home-card.js
+      - name: Test real browser against HA-shaped API fixtures
+        run: |
+          npm install --prefix /tmp/music-home-web playwright@1.55.1
+          /tmp/music-home-web/node_modules/.bin/playwright install --with-deps chromium
+          NODE_PATH=/tmp/music-home-web/node_modules node home_assistant/music_home/tests/browser.cjs
+      - name: Package card and install instructions
+        run: |
+          mkdir -p dist
+          cd home_assistant/music_home
+          zip -j ../../dist/music-home-0.1.0.zip music-home-card.js dashboard.yaml README.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: music-home-preview
+          path: |
+            dist/music-home-*.zip
+            dist/qa/music-home-*.png
+      - name: Release first tested version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=music-home-v0.1.0
+          HEAD=$(gh api "repos/${{ github.repository }}/git/ref/heads/main" --jq '.object.sha')
+          if [ "$HEAD" != "$GITHUB_SHA" ]; then exit 0; fi
+          if gh release view "$TAG" >/dev/null 2>&1; then exit 0; fi
+          gh release create "$TAG" dist/music-home-0.1.0.zip home_assistant/music_home/music-home-card.js dist/qa/music-home-*.png --target "$GITHUB_SHA" --title "Music Home 0.1.0" --notes-file home_assistant/music_home/README.md
