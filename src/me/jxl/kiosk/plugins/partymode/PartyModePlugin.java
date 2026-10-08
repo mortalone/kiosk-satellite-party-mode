@@ -116,7 +116,9 @@ public final class PartyModePlugin implements KioskPlugin {
     private long guestStateLastPoll, guestAccessRevision;
     private String reportedPartyEffect;
     private String reportedSearchModes = "";
-    private String guestQrSize = "Small";
+    private String guestQrSize = "Small", reportedGuestQrSize = "";
+    private int guestQrOpacity = 100, reportedGuestQrOpacity = -1;
+    private static final int[] QR_OPACITIES = {25, 40, 55, 70, 85, 100};
     private String guestPage = "Music Assistant", reportedGuestPage = "", reportedMenuCategories = "";
     private final String[] menuKeys = {"visuals", "music", "screen", "guests", "sound", "diagnostics"};
     private final String[] menuNames = {"Visualisering", "Musik og AI-forbindelse", "Skærm og betjening", "Gæster og QR", "Lyd og EQ", "Grafik og status"};
@@ -162,7 +164,7 @@ public final class PartyModePlugin implements KioskPlugin {
             context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit()
                     .putBoolean("party_fullscreen", false).putLong("party_until_ms", 0).apply();
             context.sendBroadcast(new Intent(PARTY_EVENT).setPackage(context.getPackageName()));
-            reportedPartyPolicy = ""; partyPolicyLastPoll = 0; partyPolicyPending = false; reportedGuestPage = ""; reportedMenuCategories = ""; reportedSearchModes = ""; reportedPartyState = null; reportedPartyEffect = null; reportedGuestAccess = null; reportedGuestQr = null; guestAccessState = null; guestAccessQueue = ""; guestStateLastPoll = 0; publishPartyState();
+            reportedPartyPolicy = ""; partyPolicyLastPoll = 0; partyPolicyPending = false; reportedGuestPage = ""; reportedGuestQrSize = ""; reportedGuestQrOpacity = -1; reportedMenuCategories = ""; reportedSearchModes = ""; reportedPartyState = null; reportedPartyEffect = null; reportedGuestAccess = null; reportedGuestQr = null; guestAccessState = null; guestAccessQueue = ""; guestStateLastPoll = 0; publishPartyState();
             configureOnMain(settings);
             readKioskMusicAssistantConfig();
             host.executeCommand("getDashboardState", Collections.emptyMap(), (ok, data, error) -> {
@@ -225,6 +227,7 @@ public final class PartyModePlugin implements KioskPlugin {
         partyQueueVisible = Boolean.parseBoolean(prefs.getString("queue_visible", "true"));
         guestPage = prefs.getString("guest_page", "Music Assistant");
         guestQrSize = prefs.getString("guest_qr_size", "Small");
+        guestQrOpacity = prefs.getInt("guest_qr_opacity", 100);
         menuCategories.clear();
         for (String key : menuKeys) if (prefs.getBoolean("menu_" + key, true)) menuCategories.add(key);
         partyGuestsFollow = Boolean.parseBoolean(savedChoice(prefs, "guests_follow", String.valueOf(!Boolean.FALSE.equals(settings.get("showGuestQr")))));
@@ -280,6 +283,15 @@ public final class PartyModePlugin implements KioskPlugin {
                     }
                     changePartyPolicy(changes);
                 } catch (Exception error) { host.status("Party-indstillingen kunne ikke ændres", true); }
+            }); return;
+        }
+        if ("select.guest_qr_size".equals(event)) {
+            main.post(() -> { if (host != null && context != null) setGuestQrSize(String.valueOf(payload.get("option"))); }); return;
+        }
+        if ("select.guest_qr_opacity".equals(event)) {
+            main.post(() -> {
+                if (host == null || context == null) return;
+                for (int opacity : QR_OPACITIES) if ((opacity + " %").equals(payload.get("option"))) setGuestQrOpacity(opacity);
             }); return;
         }
         if ("select.guest_page".equals(event)) {
@@ -408,6 +420,16 @@ public final class PartyModePlugin implements KioskPlugin {
         if (!guestPage.equals(reportedGuestPage)) {
             try { host.publishSelect("guest_page", "Guest QR destination", new String[]{"Music Assistant", "Party guest page"}, guestPage); reportedGuestPage = guestPage; }
             catch (Throwable error) { host.log("Guest destination select unavailable"); }
+        }
+        if (!guestQrSize.equals(reportedGuestQrSize)) {
+            try { host.publishSelect("guest_qr_size", "Party QR-størrelse", new String[]{"Lille", "Mellem", "Stor"}, "Large".equals(guestQrSize) ? "Stor" : "Medium".equals(guestQrSize) ? "Mellem" : "Lille"); reportedGuestQrSize = guestQrSize; }
+            catch (Throwable error) { host.log("QR size select unavailable"); }
+        }
+        if (guestQrOpacity != reportedGuestQrOpacity) {
+            String[] options = new String[QR_OPACITIES.length];
+            for (int i = 0; i < options.length; i++) options[i] = QR_OPACITIES[i] + " %";
+            try { host.publishSelect("guest_qr_opacity", "Party QR-opacity", options, guestQrOpacity + " %"); reportedGuestQrOpacity = guestQrOpacity; }
+            catch (Throwable error) { host.log("QR opacity select unavailable"); }
         }
         String categories = menuCategories.toString();
         if (!categories.equals(reportedMenuCategories)) {
@@ -1252,15 +1274,25 @@ public final class PartyModePlugin implements KioskPlugin {
         if (partyView != null) partyView.setPresentation(partyEffect, partyQueueVisible);
     }
     private void setGuestQrSize(String size) {
+        size = "Lille".equals(size) ? "Small" : "Mellem".equals(size) ? "Medium" : "Stor".equals(size) ? "Large" : size;
         if (!"Small".equals(size) && !"Medium".equals(size) && !"Large".equals(size)) return;
         guestQrSize = size;
         context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit().putString("guest_qr_size", size).apply();
-        updateParty();
+        publishPartyState(); updateParty();
+    }
+    private void setGuestQrOpacity(int opacity) {
+        boolean valid = false;
+        for (int option : QR_OPACITIES) if (option == opacity) valid = true;
+        if (!valid) return;
+        guestQrOpacity = opacity;
+        context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit().putInt("guest_qr_opacity", opacity).apply();
+        publishPartyState(); updateParty();
     }
     private void updateParty() {
         if (!partyFullscreen || partyView == null) return;
         updatePlayerControls();
         partyView.setGuestQrSize(guestQrSize);
+        partyView.setGuestQrOpacity(guestQrOpacity);
         partyView.setGuests(partyGuestsFollow ? partyQr : null, partyGuestText, partyGuestsFollow ? partyGuestStatus : "");
         if (partyGuestsFollow && !partyGuestStatus.isEmpty() && !partyGuestStatus.equals(reportedGuestStatus)) {
             reportedGuestStatus = partyGuestStatus; host.status(partyGuestStatus, false);
@@ -1337,6 +1369,7 @@ public final class PartyModePlugin implements KioskPlugin {
             addPanelAction(rows, "QR-størrelse · lille", "Small".equals(guestQrSize), () -> { setGuestQrSize("Small"); showPartyMenu(anchor); });
             addPanelAction(rows, "QR-størrelse · mellem", "Medium".equals(guestQrSize), () -> { setGuestQrSize("Medium"); showPartyMenu(anchor); });
             addPanelAction(rows, "QR-størrelse · stor", "Large".equals(guestQrSize), () -> { setGuestQrSize("Large"); showPartyMenu(anchor); });
+            for (int opacity : QR_OPACITIES) addPanelAction(rows, "QR-opacity · " + opacity + " %", guestQrOpacity == opacity, () -> { setGuestQrOpacity(opacity); showPartyMenu(anchor); });
             addPanelAction(rows, "Aktivér gæsteadgang i MA", false, () -> changePartyGuestAccess(true));
             addPanelAction(rows, "Deaktivér gæsteadgang i MA", false, () -> changePartyGuestAccess(false));
             addPanelAction(rows, "Party Guest · opsæt adresse", false, this::configureGuest);

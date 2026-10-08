@@ -11,7 +11,7 @@ time.sleep(7)
 pid=adb('shell','pidof','me.jxl.kiosk.partyqa').strip()
 if not pid:raise RuntimeError('Party QA process did not start')
 out=Path('dist/qa');out.mkdir(parents=True,exist_ok=True)
-for mode in ['main','qrlarge','qrsmall','search','placement','playlists','settings','lyrics','discolyrics','ai','similar','dj','switch','searchswitches','trackbuttons','trackbuttonsoff','menucategories','guestpage']:
+for mode in ['main','qrlarge','qrsmall','qropacity','search','placement','playlists','settings','lyrics','discolyrics','ai','similar','dj','switch','searchswitches','trackbuttons','trackbuttonsoff','menucategories','guestpage']:
  adb('shell','am','broadcast','-a','party.qa.MODE','--es','mode',mode)
  time.sleep(3)
  logs=adb('logcat','--pid='+pid,'-d','-s','PARTY_QA:I','AndroidRuntime:E')

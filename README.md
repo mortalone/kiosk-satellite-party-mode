@@ -1,4 +1,4 @@
-> Nyeste: **Party Mode 0.1.16**, **Party Guest 0.2.4**, **Party AI DJ 0.1.9**. Party Guest har en lys gæsteside med Søg / Samme stil / AI og styrer nu køplacering og automatisk fortsættelse. Se [Party Guest-opsætning](party_guest/DOCS.md).
+> Nyeste: **Party Mode 0.1.17**, **Party Guest 0.2.4**, **Party AI DJ 0.1.9**. Party Guest har en lys gæsteside med Søg / Samme stil / AI og styrer nu køplacering og automatisk fortsættelse. Se [Party Guest-opsætning](party_guest/DOCS.md).
 
 # Party Mode for Kiosk Satellite
 
@@ -160,3 +160,7 @@ The existing **Party Mode** switch and enable/disable actions remain available.
 These are entities, using Kiosk's separate limit of 32 sensor/select/switch entities,
 not slots in the 20-setting or 20-action limits. Add the Guest access switch as a
 second toggle sub-button beside Party Mode in the existing Bubble Card.
+
+### QR appearance
+
+Under the Kiosk device in Home Assistant, **Party QR-størrelse** offers Lille / Mellem / Stor and **Party QR-opacity** offers 25 / 40 / 55 / 70 / 85 / 100 %. Both settings are saved, also available under Party menu → Guests, and remain controllable when that screen category is hidden. The transparent artwork has a soft dark tint with no surrounding card or border. Defaults remain Small and 100 %; reducing opacity also reduces scan contrast.

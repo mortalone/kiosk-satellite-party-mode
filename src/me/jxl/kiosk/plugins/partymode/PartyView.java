@@ -6,6 +6,8 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.RadialGradient;
+import android.graphics.Shader;
 import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.RectF;
@@ -40,6 +42,7 @@ final class PartyView extends FrameLayout {
     private Bitmap guestQr;
     private String guestQrSize = "Small";
     private float guestQrSide;
+    private int guestQrOpacity = 100;
     private String guestText = "", guestStatus = "";
     private final PartyEffects effects = new PartyEffects();
     private boolean framePending;
@@ -143,6 +146,9 @@ final class PartyView extends FrameLayout {
     void setGuestQrSize(String size) {
         if (!guestQrSize.equals(size)) { guestQrSize = size; dirtyQueue(); requestFrame(); }
     }
+    void setGuestQrOpacity(int opacity) {
+        if (guestQrOpacity != opacity) { guestQrOpacity = opacity; dirtyQueue(); requestFrame(); }
+    }
     void setGuests(Bitmap qr, String caption, String status) {
         if (guestQr != qr || !guestText.equals(caption) || !guestStatus.equals(status)) { guestQr = qr; guestText = caption; guestStatus = status; dirtyQueue(); requestFrame(); }
     }
@@ -197,21 +203,22 @@ final class PartyView extends FrameLayout {
             guestQrSide = side;
             float x = landscape ? Math.max(22 * density, getWidth() * 0.035f) : (getWidth() - side) / 2;
             float y = landscape ? (getHeight() - side) / 2 - 10 * density : 88 * density;
-            // Opaque dark backing keeps the transparent artistic code readable over every visualizer.
-            rect.set(x - 14 * density, y - 36 * density, x + side + 14 * density, y + side + 43 * density);
-            paint.setAlpha(255); paint.setColor(0xFF090E17);
-            canvas.drawRoundRect(rect, 16 * density, 16 * density, paint);
-            paint.setColor(0x445D7B83); paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(density);
-            canvas.drawRoundRect(rect, 16 * density, 16 * density, paint); paint.setStyle(Paint.Style.FILL);
-            line(canvas, "MUSIKØNSKER", x, y - 14 * density, side, 11 * sp, true, PartyUi.ACCENT);
+            // A feathered tint protects contrast without a card, border or hard edge.
+            float cx = x + side / 2, cy = y + side / 2;
+            paint.setAlpha(Math.round(255 * guestQrOpacity / 100f));
+            paint.setShader(new RadialGradient(cx, cy, side * 0.85f,
+                    new int[]{0xED090E17, 0xD9090E17, 0x55090E17, 0x00090E17},
+                    new float[]{0f, 0.58f, 0.82f, 1f}, Shader.TileMode.CLAMP));
+            canvas.drawCircle(cx, cy, side * 0.85f, paint);
+            paint.setShader(null);
             rect.set(x, y, x + side, y + side);
             canvas.save(); clip.reset();
             clip.addRoundRect(rect, Math.min(6 * density, side * 0.025f), Math.min(6 * density, side * 0.025f), Path.Direction.CW);
-            canvas.clipPath(clip); paint.setAlpha(255); paint.setFilterBitmap(false);
+            canvas.clipPath(clip); paint.setAlpha(Math.round(255 * guestQrOpacity / 100f)); paint.setFilterBitmap(false);
             canvas.drawBitmap(guestQr, null, rect, paint); canvas.restore();
-            paint.setFilterBitmap(true);
+            paint.setFilterBitmap(true); paint.setAlpha(255);
             line(canvas, guestText.isEmpty() ? "Scan og vælg musik" : guestText, x, y + side + 24 * density,
-                    side, 12 * sp, false, PartyUi.MUTED);
+                    side, 12 * sp, false, (Math.round(Color.alpha(PartyUi.MUTED) * guestQrOpacity / 100f) << 24) | (PartyUi.MUTED & 0xFFFFFF));
             if (landscape) {
                 areaLeft = x + side + 38 * density;
                 areaWidth = getWidth() - areaLeft;

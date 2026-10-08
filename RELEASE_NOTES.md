@@ -1,3 +1,9 @@
+## 0.1.17
+
+- Remove the QR card, border and heading; integrate transparent artwork using a feathered dark tint without a hard edge.
+- Add saved Home Assistant selects Party QR-størrelse (Lille / Mellem / Stor) and Party QR-opacity (25–100 %). Changes apply immediately and synchronize with the Party screen menu, even when that menu is hidden.
+- Keep the approved artwork and dynamic guest URLs. Party Guest and AI DJ do not need an update.
+
 ## 0.1.16
 
 - Use the approved speaker/splash/equalizer QR design with extra small colored dots, preserving full artwork color and local contrast.

@@ -31,8 +31,12 @@ public final class PartyQaActivity extends Activity {
             try {
                 call("dismissSearch");
                 if ("qrsmall".equals(mode) || "qrlarge".equals(mode)) {
-                    call("setGuestQrSize", String.class, "qrsmall".equals(mode) ? "Small" : "Large");
+                    plugin.onEvent("select.guest_qr_size", Collections.singletonMap("option", "qrsmall".equals(mode) ? "Lille" : "Stor"));
                 }
+                if ("qropacity".equals(mode)) {
+                    plugin.onEvent("select.guest_qr_opacity", Collections.singletonMap("option", "55 %"));
+                    plugin.onEvent("select.guest_qr_opacity", Collections.singletonMap("option", "invalid"));
+                } else { call("setGuestQrOpacity", int.class, 100); }
                 if ("search".equals(mode) || "placement".equals(mode) || "ai".equals(mode) || "similar".equals(mode)) {
                     call("showSearch"); Dialog dialog = (Dialog)field("searchDialog");
                     if ("ai".equals(mode) && findText(dialog.getWindow().getDecorView(), "AI DJ") == null) throw new AssertionError("AI tab absent");
@@ -112,9 +116,21 @@ public final class PartyQaActivity extends Activity {
                             float base=Math.min(view.getWidth()*(landscape?.13f:.28f),view.getHeight()*(landscape?.25f:.17f));
                             if (Math.abs(side-base*("Large".equals(size)?1.65f:1f))>1) throw new AssertionError("QR size layout incorrect: " + side + " base=" + base + " size=" + size);
                             Field pf=PartyModePlugin.class.getDeclaredField("PARTY_PREFS");pf.setAccessible(true);
+                            if (!("Large".equals(size)?"Stor":"Lille").equals(selects.get("guest_qr_size"))) throw new AssertionError("HA QR size did not round trip");
                             if (!size.equals(field("guestQrSize")) || !size.equals(getSharedPreferences((String)pf.get(null),MODE_PRIVATE).getString("guest_qr_size", ""))) throw new AssertionError("QR size not saved");
                         } catch (ReflectiveOperationException e) {throw new RuntimeException(e);}
                     }
+                    if ("qropacity".equals(mode)) {
+                        try {
+                            Field opacity=PartyView.class.getDeclaredField("guestQrOpacity");opacity.setAccessible(true);
+                            Field pf=PartyModePlugin.class.getDeclaredField("PARTY_PREFS");pf.setAccessible(true);
+                            if (opacity.getInt(view)!=55 || !Integer.valueOf(55).equals(field("guestQrOpacity")) || getSharedPreferences((String)pf.get(null),MODE_PRIVATE).getInt("guest_qr_opacity",0)!=55 || !"55 %".equals(selects.get("guest_qr_opacity"))) throw new AssertionError("HA QR opacity did not round trip");
+                            call("setGuestQrOpacity", int.class, 70);
+                            if (!"70 %".equals(selects.get("guest_qr_opacity"))) throw new AssertionError("screen QR opacity did not sync to HA");
+                            call("setGuestQrOpacity", int.class, 55);
+                        } catch (ReflectiveOperationException e) { throw new RuntimeException(e); }
+                    }
+                    if ("main".equals(mode) && (!selects.containsKey("guest_qr_size") || !selects.containsKey("guest_qr_opacity"))) throw new AssertionError("QR HA controls missing");
                     if ("main".equals(mode) && field("partyQr") == null) throw new AssertionError("MA guest QR absent");
                     if ("main".equals(mode) || "guestpage".equals(mode)) {
                         try (FileOutputStream stream = new FileOutputStream(new File(getFilesDir(), "qr-" + mode + ".png"))) {
