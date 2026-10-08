@@ -128,7 +128,7 @@ public final class PartyQaActivity extends Activity {
                             call("setGuestQrOpacity", int.class, 70);
                             if (!"70 %".equals(selects.get("guest_qr_opacity"))) throw new AssertionError("screen QR opacity did not sync to HA");
                             call("setGuestQrOpacity", int.class, 55);
-                        } catch (ReflectiveOperationException e) { throw new RuntimeException(e); }
+                        } catch (Exception e) { throw new RuntimeException(e); }
                     }
                     if ("main".equals(mode) && (!selects.containsKey("guest_qr_size") || !selects.containsKey("guest_qr_opacity"))) throw new AssertionError("QR HA controls missing");
                     if ("main".equals(mode) && field("partyQr") == null) throw new AssertionError("MA guest QR absent");
