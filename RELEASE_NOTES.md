@@ -1,3 +1,10 @@
+## 0.1.18
+
+- Expose saved Music Assistant DSP presets as a Home Assistant select and current DSP enable state as a switch, independent of Party screen visibility and its EQ menu.
+- Apply verified MA preset IDs to the configured speaker's active queue, preserve filters when toggling DSP, and offer a complete original-configuration restore.
+- Read actual MA state without applying a preset at startup; refresh externally changed presets and DSP every 30 seconds. Reject stale player bindings and unverified API replies.
+- Sonos Loudness remains available through HA's native Sonos integration; it is distinct from MA DSP and volume normalization.
+
 ## 0.1.17
 
 - Remove the QR card, border and heading; integrate transparent artwork using a feathered dark tint without a hard edge.

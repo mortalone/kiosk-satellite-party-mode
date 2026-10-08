@@ -1,4 +1,4 @@
-> Nyeste: **Party Mode 0.1.17**, **Party Guest 0.2.4**, **Party AI DJ 0.1.9**. Party Guest har en lys gæsteside med Søg / Samme stil / AI og styrer nu køplacering og automatisk fortsættelse. Se [Party Guest-opsætning](party_guest/DOCS.md).
+> Nyeste: **Party Mode 0.1.18**, **Party Guest 0.2.4**, **Party AI DJ 0.1.9**. Party Guest har en lys gæsteside med Søg / Samme stil / AI og styrer nu køplacering og automatisk fortsættelse. Se [Party Guest-opsætning](party_guest/DOCS.md).
 
 # Party Mode for Kiosk Satellite
 
@@ -164,3 +164,11 @@ second toggle sub-button beside Party Mode in the existing Bubble Card.
 ### QR appearance
 
 Under the Kiosk device in Home Assistant, **Party QR-størrelse** offers Lille / Mellem / Stor and **Party QR-opacity** offers 25 / 40 / 55 / 70 / 85 / 100 %. Both settings are saved, also available under Party menu → Guests, and remain controllable when that screen category is hidden. The transparent artwork has a soft dark tint with no surrounding card or border. Defaults remain Small and 100 %; reducing opacity also reduces scan contrast.
+
+### Saved MA EQ presets from Home Assistant
+
+Under the Kiosk device, **MA EQ-preset** lists the presets saved with Music Assistant → DSP → Save DSP preset. **MA DSP slået til** toggles DSP while preserving the current filter chain. Both operate on the player ID reported as `active_queue` by the configured MA speaker entity, also when the Party screen is closed or its EQ menu is hidden. MA owns the presets; the plugin never automatically applies one on startup. Polling refreshes MA changes within 30 seconds. Reads require MA config-player read permission and changes require config-player write permission (an admin token includes both).
+
+**Tilpasset EQ** is the current manual configuration, not a reset action. **DSP fra** disables DSP without deleting filters. **Gendan oprindelig EQ** restores the complete filter chain saved before the first HA DSP change for that MA server/player. A restored preset may appear as Tilpasset EQ because MA's DSP-save endpoint clears preset associations. The older Party Punch screen action has its own per-Sonos backup and restore; it is independent of these MA preset controls.
+
+A saved DSP configuration does not prove the audio path applies it: playback must be routed through MA, and native grouping can prevent DSP. Sonos Loudness is a separate speaker setting, exposed by HA's **Sonos** integration alongside Bass and Treble; use those device entities directly. MA volume normalization is another separate function.

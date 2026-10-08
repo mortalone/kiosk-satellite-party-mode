@@ -92,6 +92,10 @@ public final class PartyModePlugin implements KioskPlugin {
     private int gain = 3, fps = 20;
     private boolean settingFpsEconomy;
     private boolean allowSearch = true, searchLibrary = true, searchSimilar = true, searchAi = true, currentSimilar = true, allowQueueTap, showQuickActions, showEqControls, eqPending;
+    private boolean dspPending, dspPublished;
+    private long dspLastPoll;
+    private String dspBinding = "";
+    private Map<String, String> dspPresets = new java.util.LinkedHashMap<>();
     private int tracksBefore = 2, tracksAfter = 2;
     private Dialog searchDialog, selectionDialog;
     private PartyLyricsView lyricsView;
@@ -140,7 +144,7 @@ public final class PartyModePlugin implements KioskPlugin {
     private final Runnable tick = new Runnable() {
         @Override public void run() {
             if (host == null || context == null) return;
-            pollMedia(); pollVisibility(); pollGuestAccessState(); pollPartyPolicy();
+            pollMedia(); pollVisibility(); pollGuestAccessState(); pollPartyPolicy(); pollDsp();
             updatePresentation();
             if (partyFullscreen) {
                 updateParty(); pollPartyQueue(); pollPartyGuests(); pollPlayerVolume(); pollPartyLyrics();
@@ -164,6 +168,7 @@ public final class PartyModePlugin implements KioskPlugin {
             context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit()
                     .putBoolean("party_fullscreen", false).putLong("party_until_ms", 0).apply();
             context.sendBroadcast(new Intent(PARTY_EVENT).setPackage(context.getPackageName()));
+            dspPending = false; dspLastPoll = 0; dspBinding = ""; dspPresets.clear(); clearDspEntities();
             reportedPartyPolicy = ""; partyPolicyLastPoll = 0; partyPolicyPending = false; reportedGuestPage = ""; reportedGuestQrSize = ""; reportedGuestQrOpacity = -1; reportedMenuCategories = ""; reportedSearchModes = ""; reportedPartyState = null; reportedPartyEffect = null; reportedGuestAccess = null; reportedGuestQr = null; guestAccessState = null; guestAccessQueue = ""; guestStateLastPoll = 0; publishPartyState();
             configureOnMain(settings);
             readKioskMusicAssistantConfig();
@@ -284,6 +289,9 @@ public final class PartyModePlugin implements KioskPlugin {
                     changePartyPolicy(changes);
                 } catch (Exception error) { host.status("Party-indstillingen kunne ikke ændres", true); }
             }); return;
+        }
+        if ("select.dsp_preset".equals(event) || "switch.dsp_enabled".equals(event)) {
+            main.post(() -> { if (host != null && context != null) changeDsp("switch.dsp_enabled".equals(event) ? Boolean.TRUE.equals(payload.get("on")) : String.valueOf(payload.get("option"))); }); return;
         }
         if ("select.guest_qr_size".equals(event)) {
             main.post(() -> { if (host != null && context != null) setGuestQrSize(String.valueOf(payload.get("option"))); }); return;
@@ -1132,6 +1140,100 @@ public final class PartyModePlugin implements KioskPlugin {
             });
         });
     }
+    private String dspKey() { return nowPlayingEntity + "|" + maBase() + "|" + activeQueue(); }
+    private void clearDspEntities() {
+        dspPresets.clear();
+        if (!dspPublished || host == null) return;
+        try { host.removeSelect("dsp_preset"); host.removeSwitch("dsp_enabled"); } catch (Throwable ignored) {}
+        dspPublished = false;
+    }
+    private void publishDsp(JSONObject config) {
+        if (host == null || !PartyDsp.valid(config)) return;
+        java.util.List<String> options = new java.util.ArrayList<>();
+        options.add(PartyDsp.CUSTOM); options.add(PartyDsp.OFF); options.add(PartyDsp.RESTORE); options.addAll(dspPresets.keySet());
+        try {
+            host.publishSelect("dsp_preset", "MA EQ-preset", options.toArray(new String[0]), PartyDsp.selected(config, dspPresets));
+            host.publishSwitch("dsp_enabled", "MA DSP slået til", config.optBoolean("enabled"));
+            dspPublished = true;
+        } catch (Throwable error) { host.log("MA DSP entities unavailable: " + error.getMessage()); }
+    }
+    private void pollDsp() {
+        if (host == null || context == null || io == null) return;
+        String binding = dspKey();
+        if (!binding.equals(dspBinding)) { clearDspEntities(); dspBinding = binding; dspLastPoll = 0; }
+        if (dspPending || activeQueue().isEmpty() || maBaseUrl.isEmpty() || maToken.isEmpty()) return;
+        long now = SystemClock.elapsedRealtime();
+        if (dspLastPoll != 0 && now - dspLastPoll < 30000) return;
+        dspLastPoll = now; dspPending = true;
+        final String queue = activeQueue(), base = maBase(), token = maToken;
+        final PluginHost owner = host;
+        io.execute(() -> {
+            JSONObject config = null; Map<String, String> presets = new java.util.LinkedHashMap<>();
+            try {
+                Object raw = partyRequest(base, token, "config/players/dsp/get", new JSONObject().put("player_id", queue));
+                if (!PartyDsp.valid(raw)) throw new IllegalStateException("Invalid MA DSP response");
+                config = (JSONObject)raw;
+                Object rows = partyRequest(base, token, "config/dsp_presets/get", new JSONObject());
+                if (!(rows instanceof JSONArray)) throw new IllegalStateException("MA presets unavailable");
+                presets = PartyDsp.presets((JSONArray)rows);
+            } catch (Throwable error) { if (host == owner) owner.log("MA DSP read failed; check MA config-read token permission"); }
+            final JSONObject found = config; final Map<String, String> choices = presets;
+            main.post(() -> {
+                if (host != owner) return;
+                dspPending = false;
+                if (!binding.equals(dspKey()) || !token.equals(maToken)) return;
+                if (found == null) { clearDspEntities(); return; }
+                dspPresets = choices; publishDsp(found);
+            });
+        });
+    }
+    private void changeDsp(Object choice) {
+        if (host == null || context == null || io == null || dspPending || !dspPublished || !dspBinding.equals(dspKey())) return;
+        String option = String.valueOf(choice), preset = dspPresets.get(option);
+        if (!(choice instanceof Boolean) && preset == null && !PartyDsp.OFF.equals(option) && !PartyDsp.RESTORE.equals(option)) return;
+        final String queue = activeQueue(), base = maBase(), token = maToken, binding = dspKey();
+        final PluginHost owner = host;
+        final SharedPreferences backups = context.getSharedPreferences("party_ma_dsp_original", Context.MODE_PRIVATE);
+        dspPending = true;
+        io.execute(() -> {
+            JSONObject result = null; String message = "MA EQ kunne ikke ændres. Kontrollér tokenets rettighed til afspillerindstillinger.";
+            boolean failed = true;
+            try {
+                Object current = partyRequest(base, token, "config/players/dsp/get", new JSONObject().put("player_id", queue));
+                if (!PartyDsp.valid(current)) throw new IllegalStateException();
+                JSONObject config = (JSONObject)current;
+                String key = base + "|" + queue;
+                if (PartyDsp.RESTORE.equals(option)) {
+                    String original = backups.getString(key, "");
+                    if (original.isEmpty()) throw new IllegalStateException("No original EQ snapshot");
+                    config = new JSONObject(original);
+                    if (!PartyDsp.valid(config)) throw new IllegalStateException();
+                } else if (!backups.contains(key) && !backups.edit().putString(key, config.toString()).commit()) throw new IllegalStateException();
+                if (host != owner || !binding.equals(dspKey()) || !token.equals(maToken)) throw new IllegalStateException("Player changed");
+                Object saved;
+                if (preset != null) saved = partyRequest(base, token, "config/players/dsp/apply_preset", new JSONObject().put("player_id", queue).put("preset_id", preset));
+                else {
+                    if (!PartyDsp.RESTORE.equals(option)) config = PartyDsp.enabled(config, choice instanceof Boolean && (Boolean)choice);
+                    saved = partyRequest(base, token, "config/players/dsp/save", new JSONObject().put("player_id", queue).put("config", config));
+                }
+                if (!PartyDsp.valid(saved)) throw new IllegalStateException();
+                result = (JSONObject)saved;
+                if (preset != null && !preset.equals(result.optString("preset_id"))) throw new IllegalStateException("Preset not confirmed");
+                if (preset == null && result.optBoolean("enabled") != config.optBoolean("enabled")) throw new IllegalStateException("DSP state not confirmed");
+                if (PartyDsp.RESTORE.equals(option)) backups.edit().remove(key).commit();
+                failed = false; message = "MA EQ-indstilling gemt for den valgte afspiller. DSP kræver afspilning gennem MA og en understøttet afspiller/gruppering.";
+            } catch (Throwable error) { if (host == owner) owner.log("MA DSP update failed: " + error.getMessage()); }
+            final JSONObject confirmed = result; final String status = message; final boolean error = failed;
+            main.post(() -> {
+                if (host != owner) return;
+                dspPending = false; dspLastPoll = 0;
+                if (!binding.equals(dspKey()) || !token.equals(maToken)) return;
+                if (!error) publishDsp(confirmed);
+                owner.status(status, error); pollDsp();
+            });
+        });
+    }
+
     private void changeEq(boolean restore) {
         if (!showEqControls || !playerControlsReady() || eqPending || io == null) return;
         final String queue = activeQueue(); final long generation = partyGeneration;

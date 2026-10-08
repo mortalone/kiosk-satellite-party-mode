@@ -18,6 +18,17 @@ public final class PartyEqTest {
         JSONArray bands = config.getJSONArray("filters").getJSONObject(0).getJSONArray("bands");
         check(bands.length() == 4 && bands.getJSONObject(1).getDouble("frequency") == 95, "punch band");
         check(bands.getJSONObject(0).getString("channel").equals("ALL"), "MA channel enum");
+        check(!PartyDsp.valid(new JSONObject().put("error_code", 5)), "API errors rejected");
+        check(!PartyDsp.valid(new JSONObject().put("enabled", "true").put("filters", new JSONArray())), "typed DSP response required");
+        JSONObject disabled = PartyDsp.enabled(config, false);
+        check(config.getBoolean("enabled") && !disabled.getBoolean("enabled") && disabled.getJSONArray("filters").toString().equals(config.getJSONArray("filters").toString()), "toggle preserves original filter chain without mutation");
+        JSONArray presets = new JSONArray().put(new JSONObject().put("preset_id", "first").put("name", "Bass").put("config", config))
+            .put(new JSONObject().put("preset_id", "second").put("name", "Bass").put("config", config)).put(JSONObject.NULL)
+            .put(new JSONObject().put("preset_id", "bad").put("name", "Bad").put("config", new JSONObject()));
+        Map<String,String> choices=PartyDsp.presets(presets);
+        check(choices.size()==2 && choices.containsValue("first") && choices.containsValue("second"), "duplicate preset names retain distinct verified IDs; malformed rows omitted");
+        check("MA · Bass".equals(PartyDsp.selected(new JSONObject(config.toString()).put("preset_id", "first"), choices)), "reports actual MA preset");
+        check(PartyDsp.CUSTOM.equals(PartyDsp.selected(config, choices)) && PartyDsp.OFF.equals(PartyDsp.selected(disabled, choices)), "custom and disabled state truthful");
         System.out.println(config.toString());
         System.out.println("Party EQ checks passed");
     }

@@ -25,6 +25,9 @@ public final class PartyQaActivity extends Activity {
     private final Map<String, Boolean> switches = new HashMap<>();
     private final Map<String, String> selects = new HashMap<>();
     private final JSONObject policy = new JSONObject();
+    private JSONObject dsp = originalDsp();
+    private boolean dspAppliedWhileHidden;
+    private static JSONObject originalDsp() { try { return new JSONObject().put("enabled",true).put("input_gain",-2).put("output_gain",1).put("filters",new JSONArray()); } catch(Exception e) { throw new RuntimeException(e); } }
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
         @Override public void onReceive(Context c, Intent intent) {
             String mode = intent.getStringExtra("mode");
@@ -37,6 +40,12 @@ public final class PartyQaActivity extends Activity {
                     plugin.onEvent("select.guest_qr_opacity", Collections.singletonMap("option", "55 %"));
                     plugin.onEvent("select.guest_qr_opacity", Collections.singletonMap("option", "invalid"));
                 } else { call("setGuestQrOpacity", int.class, 100); }
+                if ("dsppreset".equals(mode)) {
+                    plugin.execute("hide", Collections.emptyMap());
+                    main.postDelayed(() -> plugin.onEvent("select.dsp_preset", Collections.singletonMap("option", "MA · Testbas")), 400);
+                    main.postDelayed(() -> plugin.execute("show", Collections.emptyMap()), 1600);
+                } else if ("dspoff".equals(mode)) plugin.onEvent("switch.dsp_enabled", Collections.singletonMap("on", false));
+                else if ("dsprestore".equals(mode)) plugin.onEvent("select.dsp_preset", Collections.singletonMap("option", PartyDsp.RESTORE));
                 if ("search".equals(mode) || "placement".equals(mode) || "ai".equals(mode) || "similar".equals(mode)) {
                     call("showSearch"); Dialog dialog = (Dialog)field("searchDialog");
                     if ("ai".equals(mode) && findText(dialog.getWindow().getDecorView(), "AI DJ") == null) throw new AssertionError("AI tab absent");
@@ -130,6 +139,9 @@ public final class PartyQaActivity extends Activity {
                             call("setGuestQrOpacity", int.class, 55);
                         } catch (Exception e) { throw new RuntimeException(e); }
                     }
+                    if ("dsppreset".equals(mode) && (!dspAppliedWhileHidden || !"MA · Testbas".equals(selects.get("dsp_preset")) || !Boolean.TRUE.equals(switches.get("dsp_enabled")))) throw new AssertionError("MA preset control failed while Party hidden");
+                    if ("dspoff".equals(mode) && (!Boolean.FALSE.equals(switches.get("dsp_enabled")) || !PartyDsp.OFF.equals(selects.get("dsp_preset")) || dsp.optJSONArray("filters").length()!=1)) throw new AssertionError("DSP toggle deleted filters or did not sync");
+                    if ("dsprestore".equals(mode) && (!Boolean.TRUE.equals(switches.get("dsp_enabled")) || !PartyDsp.CUSTOM.equals(selects.get("dsp_preset")) || dsp.optDouble("input_gain")!=-2 || dsp.optDouble("output_gain")!=1 || dsp.optJSONArray("filters").length()!=0)) throw new AssertionError("complete original DSP not restored");
                     if ("main".equals(mode) && (!selects.containsKey("guest_qr_size") || !selects.containsKey("guest_qr_opacity"))) throw new AssertionError("QR HA controls missing");
                     if ("main".equals(mode) && field("partyQr") == null) throw new AssertionError("MA guest QR absent");
                     if ("main".equals(mode) || "guestpage".equals(mode)) {
@@ -197,6 +209,18 @@ public final class PartyQaActivity extends Activity {
     }
     private Object response(JSONObject request) throws Exception {
         String cmd=request.optString("command");JSONObject args=request.optJSONObject("args");
+        if(cmd.startsWith("config/players/dsp/")) {
+            if (!"qa-group".equals(args.optString("player_id"))) throw new AssertionError("DSP used wrong player");
+            synchronized(this) {
+                if(cmd.endsWith("apply_preset")) {
+                    if(!"qa-bass".equals(args.optString("preset_id")))throw new AssertionError("unverified preset ID");
+                    dspAppliedWhileHidden=!Boolean.TRUE.equals(field("partyFullscreen"));
+                    dsp=PartyEq.punch().put("preset_id", "qa-bass");
+                } else if(cmd.endsWith("save")) { dsp=new JSONObject(args.getJSONObject("config").toString()); dsp.remove("preset_id"); }
+                return new JSONObject(dsp.toString());
+            }
+        }
+        if(cmd.equals("config/dsp_presets/get"))return new JSONArray().put(new JSONObject().put("preset_id", "qa-bass").put("name", "Testbas").put("config", PartyEq.punch()));
         if(cmd.equals("player_queues/get"))return new JSONObject().put("queue_id","qa-group").put("current_index",4).put("items",9).put("elapsed_time",39).put("state","playing").put("current_item",item(4)).put("next_item",item(5));
         if(cmd.equals("player_queues/items")){JSONArray items=new JSONArray();for(int i=args.optInt("offset");i<Math.min(9,args.optInt("offset")+args.optInt("limit"));i++)items.put(item(i));return items;}
         if(cmd.equals("party/player")) return "qa-group";
