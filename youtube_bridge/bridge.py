@@ -25,7 +25,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 
 LOG = logging.getLogger("youtube_bridge")
 VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
-VERSION = "0.1.3"
+VERSION = "0.1.4"
 
 
 class BridgeError(Exception):
@@ -529,6 +529,7 @@ class Bridge:
             return {}
         empty = {"getPodcasts": ("podcasts", "channel"), "getNewestPodcasts": ("newestPodcasts", "episode"),
                  "getInternetRadioStations": ("internetRadioStations", "internetRadioStation"),
+                 "getSimilarSongs": ("similarSongs", "song"),
                  "getSimilarSongs2": ("similarSongs2", "song"), "getTopSongs": ("topSongs", "song"),
                  "getBookmarks": ("bookmarks", "bookmark"), "getLyricsBySongId": ("lyricsList", "structuredLyrics")}
         if action in empty:

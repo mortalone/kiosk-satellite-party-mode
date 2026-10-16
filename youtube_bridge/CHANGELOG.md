@@ -1,3 +1,9 @@
+# 0.1.4
+
+- Fix repeated errors/loading on MA track detail pages: return an empty successful getSimilarSongs response, matching the action used by MA.
+- Keep getSimilarSongs2 compatibility; add real OpenSubsonic client and JSON/XML regression checks.
+- This fixes protocol compatibility; it does not add YouTube recommendations.
+
 # 0.1.3
 
 - Prefetch upcoming YouTube tracks from MA queues through its read-only API.

@@ -90,6 +90,24 @@ class ContractTests(unittest.IsolatedAsyncioTestCase):
         await self.conn.get_artists()
         await self.conn.get_album_list2("newest")
 
+    async def test_ma_track_page_similar_songs(self):
+        self.bridge.put(INFO)
+        # MA's track details call the original endpoint, not getSimilarSongs2.
+        for _ in range(3):
+            self.assertEqual(await self.conn.get_similar_songs(iid=ID, count=25), [])
+        async with httpx.AsyncClient(trust_env=False) as client:
+            for action, parent in [("getSimilarSongs", "similarSongs"), ("getSimilarSongs2", "similarSongs2")]:
+                params = {"u": "youtube", "p": "test-password", "id": ID, "count": 25, "f": "json"}
+                r = await client.get(f"http://127.0.0.1:{self.port}/rest/{action}.view", params=params)
+                body = r.json()["subsonic-response"]
+                self.assertEqual(body["status"], "ok")
+                self.assertEqual(body[parent], {"song": []})
+                params["f"] = "xml"
+                r = await client.get(f"http://127.0.0.1:{self.port}/rest/{action}.view", params=params)
+                self.assertIn('status="ok"', r.text)
+                self.assertIn(parent, r.text)
+        self.assertEqual(self.calls, [], "Recommendation panel never starts YouTube extraction")
+
     async def test_exact_link_and_restart(self):
         result = await self.conn.search3("https://www.youtube.com/shorts/" + ID, song_count=10)
         self.assertEqual(result.song[0].id, ID)
