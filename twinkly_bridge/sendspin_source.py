@@ -23,6 +23,7 @@ from aiosendspin.noise.keys import Identity, b64url_decode
 from aiosendspin.noise.trust_store import FileClientPairingStore
 
 from bass import PcmBass
+from speaker_sync import SpeakerSync
 
 LOG = logging.getLogger("sendspin_source")
 
@@ -126,7 +127,9 @@ class SendspinSource:
             buffer_capacity=1048576, supported_commands=[PlayerCommand.VOLUME, PlayerCommand.MUTE])
         self.player_volume, self.player_muted = 100, False
         self.directory = directory
-        self.delay = max(-2000, min(2000, int(options.get("light_delay_ms", 0)))) / 1000
+        self.manual_delay = max(-5000, min(5000, int(options.get("light_delay_ms", 0)))) / 1000
+        self.auto_delay = 0.0
+        self.delay = self.manual_delay
         self.support = ClientHelloVisualizerSupport(buffer_capacity=131072, rate_max=bridge.fps,
             types=["spectrum", "loudness", "peak"],
             spectrum=ClientHelloVisualizerSpectrum(n_disp_bins=32, scale="log", f_min=40, f_max=16000))
@@ -136,6 +139,12 @@ class SendspinSource:
         self.loop = None
         self.stopping = threading.Event()
         self.lock = threading.Lock()
+        self.stream_start_at = None
+        self.last_unadjusted_due = None
+        self.speaker_sync = SpeakerSync(options, directory=directory, on_delay=self.set_auto_delay, diagnostic=bridge.diagnostic)
+        if self.speaker_sync.info["auto_delay_ms"] > 0 and (self.speaker_sync.candidate_subnets() or self.speaker_sync.candidate_endpoints()):
+            self.auto_delay = self.speaker_sync.info["auto_delay_ms"] / 1000
+            self.delay = self.manual_delay + self.auto_delay
         self.info = {"connected": False, "state": "waiting" if self.url else "disabled", "error": "",
                      "group": "", "playback": "", "frames_received": 0, "frames_rendered": 0,
                      "protocol": "", "client_id": "", "clock_synced": False,
@@ -149,13 +158,28 @@ class SendspinSource:
 
     def status(self):
         with self.lock:
-            return dict(self.info)
+            result = dict(self.info)
+        result["effective_delay_ms"] = round(self.delay * 1000)
+        result["speaker_sync"] = self.speaker_sync.status()
+        return result
+
+    def note_stream_time(self, unadjusted_due):
+        with self.lock:
+            restart = self.stream_start_at is None or (
+                self.last_unadjusted_due is not None and abs(unadjusted_due - self.last_unadjusted_due) > 2.5
+            )
+            if restart:
+                self.stream_start_at = unadjusted_due
+            self.last_unadjusted_due = unadjusted_due
+        if restart:
+            self.speaker_sync.on_stream_start(unadjusted_due)
 
     def group_update(self, payload):
         state = getattr(payload.playback_state, "value", payload.playback_state)
         values = {}
         if payload.group_name is not None:
             values["group"] = payload.group_name
+            self.speaker_sync.set_group_name(payload.group_name)
         if state is not None:
             values["playback"] = state
             if state != "playing":
@@ -176,27 +200,48 @@ class SendspinSource:
         if not synced:
             return
         for frame in frames:
-            due = time.monotonic() + (client.compute_play_time(frame.timestamp_us) - client.now_us()) / 1e6 + self.delay
+            unadjusted_due = time.monotonic() + (client.compute_play_time(frame.timestamp_us) - client.now_us()) / 1e6
+            self.note_stream_time(unadjusted_due)
+            due = unadjusted_due + self.delay
             if self.buffer.add(frame, due):
                 with self.lock:
                     self.info["frames_received"] += 1
 
-    def set_delay(self, milliseconds):
-        value = milliseconds / 1000
-        def apply():
-            shift = value - self.delay; self.delay = value
-            self.bridge.diagnostic.add("delay", milliseconds=milliseconds, shifted_frames=len(self.buffer.frames))
+    def _apply_combined_delay(self, manual_ms=None, auto_ms=None):
+        if manual_ms is not None:
+            self.manual_delay = max(-5.0, min(5.0, manual_ms / 1000))
+        if auto_ms is not None:
+            self.auto_delay = max(0.0, min(8.0, auto_ms / 1000))
+        value = self.manual_delay + self.auto_delay
+        shift = value - self.delay
+        self.delay = value
+        self.bridge.diagnostic.add("delay", milliseconds=round(value * 1000),
+            manual_ms=round(self.manual_delay * 1000), auto_ms=round(self.auto_delay * 1000),
+            shifted_frames=len(self.buffer.frames))
+        if shift:
             self.buffer.frames = [(due+shift, serial, frame) for due,serial,frame in self.buffer.frames]
             heapq.heapify(self.buffer.frames)
-        if self.loop is not None: self.loop.call_soon_threadsafe(apply)
-        else: apply()
+
+    def set_delay(self, milliseconds):
+        if self.loop is not None: self.loop.call_soon_threadsafe(self._apply_combined_delay, milliseconds, None)
+        else: self._apply_combined_delay(milliseconds, None)
+
+    def set_auto_delay(self, milliseconds):
+        if self.loop is not None: self.loop.call_soon_threadsafe(self._apply_combined_delay, None, milliseconds)
+        else: self._apply_combined_delay(None, milliseconds)
 
     def clear_stream(self):
+        with self.lock:
+            self.stream_start_at = None
+            self.last_unadjusted_due = None
+        self.speaker_sync.on_stream_clear()
         self.buffer.clear(); self.bass_analyzer.reset()
 
-    def analyze_pcm(self, data, timestamp, rate, channels, bits, due):
+    def analyze_pcm(self, data, timestamp, rate, channels, bits, unadjusted_due_fn):
+        first_due = unadjusted_due_fn(timestamp)
+        self.note_stream_time(first_due)
         for frame in self.bass_analyzer.feed(data, timestamp, rate, channels, bits):
-            self.buffer.add(frame, due(frame.timestamp_us))
+            self.buffer.add(frame, unadjusted_due_fn(frame.timestamp_us) + self.delay)
 
     def receive_audio(self, timestamp, data, audio_format):
         """Discard PCM after measuring its timestamped bass envelope."""
@@ -204,7 +249,7 @@ class SendspinSource:
         if self.clock_client is not None and self.clock_client.is_time_synchronized():
             client = self.clock_client
             self.analyze_pcm(data, timestamp, pcm.sample_rate, pcm.channels, pcm.bit_depth,
-                lambda stamp: time.monotonic()+(client.compute_play_time(stamp)-client.now_us())/1e6+self.delay)
+                lambda stamp: time.monotonic()+(client.compute_play_time(stamp)-client.now_us())/1e6)
         self.count_audio(data, f"{audio_format.codec.value} · {pcm.sample_rate} Hz · {pcm.channels} kanaler · {pcm.bit_depth} bit")
 
     def count_audio(self, data, audio_format):
@@ -229,7 +274,7 @@ class SendspinSource:
         client = SendspinClient(identity, "Twinkly Bridge", self.roles, pairing_store=store,
             player_support=self.player_support if self.player_enabled else None,
             artwork_support=self.artwork_support, visualizer_support=self.support, session=session,
-            device_info=DeviceInfo(product_name="Twinkly Bridge", manufacturer="Kiosk companion", software_version="0.1.8"))
+            device_info=DeviceInfo(product_name="Twinkly Bridge", manufacturer="Kiosk companion", software_version="0.2.0"))
         self.clock_client = client
         disconnected = asyncio.Event()
         client.add_artwork_listener(lambda channel, data: self.bridge.artwork(data) if channel == 0 else None)
@@ -277,7 +322,7 @@ class SendspinSource:
             "name": "Twinkly Bridge", "version": 1, "supported_roles": [role.value for role in self.roles],
             "artwork@v1_support": self.artwork_support.to_dict(),
             "visualizer@v1_support": self.support.to_dict(),
-            "device_info": {"product_name": "Twinkly Bridge", "software_version": "0.1.8"}}
+            "device_info": {"product_name": "Twinkly Bridge", "software_version": "0.2.0"}}
         state_payload = {"available": True, "state": "synchronized"}
         if self.player_enabled:
             hello_payload["player@v1_support"] = self.player_support.to_dict()
@@ -342,13 +387,15 @@ class SendspinSource:
                         if synced:
                             self.analyze_pcm(message.data[9:], struct.unpack(">q", message.data[1:9])[0],
                                 audio_config.get("sample_rate",0), audio_config.get("channels",0), audio_config.get("bit_depth",0),
-                                lambda stamp: clock.compute_client_time(stamp)/1e6+self.delay)
+                                lambda stamp: clock.compute_client_time(stamp)/1e6)
                         continue
                     if not synced or not active:
                         continue
                     frame = decode_legacy_frame(message.data, bins)
                     if frame is not None:
-                        due = clock.compute_client_time(frame.timestamp_us) / 1e6 + self.delay
+                        unadjusted_due = clock.compute_client_time(frame.timestamp_us) / 1e6
+                        self.note_stream_time(unadjusted_due)
+                        due = unadjusted_due + self.delay
                         if self.buffer.add(frame, due):
                             with self.lock:
                                 self.info["frames_received"] += 1
@@ -364,6 +411,7 @@ class SendspinSource:
         if not self.url:
             return
         renderer = asyncio.create_task(self.render())
+        sync_task = asyncio.create_task(self.speaker_sync.run(self.stopping))
         try:
             identity = load_identity(self.directory)
             store = await FileClientPairingStore.open(self.directory / "sendspin_pairing.json")
@@ -412,8 +460,9 @@ class SendspinSource:
             LOG.exception("Could not start Sendspin receiver")
             self.update(state="error", error=f"{type(exc).__name__}: Could not load Sendspin state")
         finally:
+            sync_task.cancel()
             renderer.cancel()
-            await asyncio.gather(renderer, return_exceptions=True)
+            await asyncio.gather(sync_task, renderer, return_exceptions=True)
             self.clear_stream()
 
     def start(self):
@@ -421,4 +470,5 @@ class SendspinSource:
 
     def stop(self):
         self.stopping.set()
+        self.speaker_sync.wake.set()
         self.thread.join(timeout=17)

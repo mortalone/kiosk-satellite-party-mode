@@ -21,7 +21,8 @@ Home Assistant OS/Supervised with the add-on store is required.
 | `sendspin_url` | empty | Direct Music Assistant Sendspin URL, e.g. `ws://192.168.1.10:8927/sendspin` |
 | `sendspin_protocol` | auto | Detect classic servers or use the official encrypted Noise client; force `legacy`/`noise` if needed |
 | `sendspin_player` | true | Register as a silent PCM audio receiver plus visualizer for group compatibility; false restores visualizer-only mode |
-| `light_delay_ms` | 0 | Light timing adjustment: positive means later, negative means earlier; −2000 to 2000 ms |
+| `sync_speaker` | auto | Automatic UPnP speaker buffer sync (`auto`, `off`, or speaker `RINCON_...` UUID / name / IP) |
+| `light_delay_ms` | 0 | Manual fine-tuning offset added to automatic speaker sync: positive means later, negative means earlier; −5000 to 5000 ms |
 | `music_punch` | 50 | Initial Calm ↔ Disco setting, 0–100; independent of maximum brightness |
 | `music_pattern` | mirror | Initial music style: spectrum, mirror, pulse, wave, particles, tunnel |
 

@@ -1,3 +1,11 @@
+# 0.2.0
+
+- Add 100% digital, microphone-free UPnP/Sonos speaker buffer synchronization (`SpeakerSync`) to automatically align Twinkly LEDs with the exact millisecond audio leaves the physical speaker.
+- Auto-discover all Sonos zone coordinators on the LAN via SSDP + `ZoneGroupTopology#GetZoneGroupState` without any hardcoded speaker names or IPs.
+- Track the active speaker's `<RelTime>` second-flip against the Sendspin stream start time (`T0`) to measure the dynamic HTTP stream buffer latency (typically 3.5–4.5 s on Universal Group streams) with ±25 ms precision.
+- Add configurable `sync_speaker` selector in ingress UI and add-on configuration (`auto`, `off`, or a specific speaker persisted by hardware `RINCON_...` UUID so renaming speakers or DHCP IP changes never break selection).
+- Combine automatic buffer delay with manual `light_delay_ms` fine-tuning (widened to −5000..5000 ms) and reschedule buffered Sendspin visualizer and PCM bass frames in-place.
+
 # 0.1.9
 
 - Replace PCM amplitude-rise decisions with a bass-focused, maximum-filter spectral-flux detector inspired by SuperFlux. Combine new bass energy with a nearby broadband attack and an adaptive median/MAD threshold; reject treble-only events and drum-tail cutoffs.

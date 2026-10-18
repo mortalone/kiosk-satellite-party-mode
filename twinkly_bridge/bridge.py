@@ -32,12 +32,17 @@ def validate_control(data):
         if data["pattern"] not in PATTERNS:
             raise ValueError("Unknown music pattern")
         result["pattern"] = data["pattern"]
-    for key, low, high in (("brightness", 0, 100), ("speed", 0.1, 5), ("gain", 0.5, 3), ("punch", 0, 100), ("light_delay_ms", -2000, 2000)):
+    for key, low, high in (("brightness", 0, 100), ("speed", 0.1, 5), ("gain", 0.5, 3), ("punch", 0, 100), ("light_delay_ms", -5000, 5000)):
         if key in data:
             value = float(data[key])
             if not math.isfinite(value) or not low <= value <= high:
                 raise ValueError(f"{key} must be {low}..{high}")
             result[key] = int(value) if key == "brightness" else value
+    if "sync_speaker" in data:
+        value = data["sync_speaker"]
+        if not isinstance(value, str) or not 1 <= len(value.strip()) <= 64 or any(ord(c) < 32 for c in value):
+            raise ValueError("Invalid sync_speaker")
+        result["sync_speaker"] = value.strip()
     if "color" in data:
         value = data["color"]
         if not isinstance(value, str) or len(value) != 7 or value[0] != "#":
@@ -232,6 +237,7 @@ class Bridge:
         self.settings = {"mode": "restore", "brightness": int(options.get("brightness", 30)),
                          "speed": float(options.get("speed", 1)), "color": (255, 64, 128),
                          "light_delay_ms": options.get("light_delay_ms", 0),
+                         "sync_speaker": str(options.get("sync_speaker", "auto") or "auto").strip() or "auto",
                          "cover_colors": options.get("cover_colors", False),
                          "pattern": options.get("music_pattern", "mirror"), "gain": 1.0,
                          "punch": validate_control({"punch": options.get("music_punch", 50)})["punch"]}
@@ -264,6 +270,7 @@ class Bridge:
             self.settings.update(update)
             self.revision += 1
         if "light_delay_ms" in update and self.sendspin is not None: self.sendspin.set_delay(update["light_delay_ms"])
+        if "sync_speaker" in update and self.sendspin is not None: self.sendspin.speaker_sync.set_selection(update["sync_speaker"])
         self.diagnostic.add("control", settings=update)
         self.wake.set()
         return self.status()
@@ -312,6 +319,7 @@ class Bridge:
                     "punch": self.settings["punch"],
                     "color": "#" + "".join(f"{c:02x}" for c in self.settings["color"]),
                     "light_delay_ms": self.settings["light_delay_ms"],
+                    "sync_speaker": self.settings["sync_speaker"],
                     "cover_colors": self.settings["cover_colors"],
                     "cover_palette": ["#"+"".join(f"{c:02x}" for c in rgb) for rgb in self.cover_palette],
                     "revision": self.revision,
@@ -323,7 +331,14 @@ class Bridge:
                     "spectrum_fresh": time.monotonic() - self.bands_at < 1.5,
                     "audio_fresh": time.monotonic() - self.bands_at < 1.5 or time.monotonic()-self.bass_at < .2}
         result["diagnostic"] = self.diagnostic.status()
-        result["sendspin"] = self.sendspin.status() if self.sendspin else {"connected": False, "state": "disabled"}
+        sendspin = self.sendspin.status() if self.sendspin else {"connected": False, "state": "disabled"}
+        result["sendspin"] = sendspin
+        result["speaker_sync"] = sendspin.get("speaker_sync", {"selection": result["sync_speaker"], "state": "disabled", "auto_delay_ms": 0, "speakers": []})
+        if self.sendspin:
+            result["sync_speaker"] = result["speaker_sync"].get("selection", result["sync_speaker"])
+            result["effective_delay_ms"] = sendspin.get("effective_delay_ms", result["light_delay_ms"])
+        else:
+            result["effective_delay_ms"] = result["light_delay_ms"]
         return result
 
     def audio_snapshot(self, now, punch):
@@ -518,7 +533,7 @@ def handler_for(bridge, ingress=False):
                 if self.path == "/api/diagnostic":
                     if data.get("action") == "start":
                         with bridge.lock:
-                            metadata = dict(version="0.1.9", settings=dict(bridge.settings), fps=bridge.fps)
+                            metadata = dict(version="0.2.0", settings=dict(bridge.settings), fps=bridge.fps)
                         bridge.diagnostic.start(metadata)
                     elif data.get("action") == "stop": bridge.diagnostic.stop()
                     else: raise ValueError("Expected start or stop")

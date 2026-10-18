@@ -12,7 +12,7 @@ async function readApiResponse(response) {
 class ControlQueue {
   constructor(send, onState, onError) {
     this.send = send; this.onState = onState; this.onError = onError;
-    this.state = {mode:'restore', color:'#ff4080', brightness:30, speed:1, pattern:'mirror', gain:1, punch:50, cover_colors:false, light_delay_ms:0};
+    this.state = {mode:'restore', color:'#ff4080', brightness:30, speed:1, pattern:'mirror', gain:1, punch:50, cover_colors:false, light_delay_ms:0, sync_speaker:'auto'};
     this.pending = null; this.sending = false; this.epoch = 0; this.revision = -1;
   }
   accept(status, epoch) {
@@ -45,7 +45,9 @@ function sourceDescription(s) {
   const source = s.sendspin || {};
   if (!source.connected) return source.state === 'disabled' ? 'Angiv sendspin_url under konfiguration' : 'Sendspin: '+(source.state||'venter');
   const signal = (s.spectrum_fresh ?? s.audio_fresh) ? 'Modtager visualiseringsdata' : s.bass_fresh ? 'Modtager PCM-lyd · spektrum mangler; baspuls fortsætter' : source.clock_synced ? 'Venter på musik fra gruppen' : 'Synkroniserer ur…';
-  return 'Sendspin forbundet'+(source.group?' · '+source.group:'')+'\n'+signal;
+  const sync = s.speaker_sync || source.speaker_sync || {};
+  const syncLine = sync.state === 'locked' && sync.speaker_name ? '\nHøjttalersynk: '+sync.speaker_name+' (+'+sync.auto_delay_ms+' ms buffer)' : sync.state === 'buffering' && sync.speaker_name ? '\nHøjttalersynk: '+sync.speaker_name+' (buffer fyldes…)' : '';
+  return 'Sendspin forbundet'+(source.group?' · '+source.group:'')+'\n'+signal+syncLine;
 }
 if (typeof module !== 'undefined') module.exports = {ControlQueue, readApiResponse, sourceDescription};
 if (typeof document !== 'undefined') {
@@ -61,10 +63,36 @@ if (typeof document !== 'undefined') {
       throw error;
     } finally { clearTimeout(timeout); }
   }
+  function syncSpeakerOptions(speakers, selected) {
+    const select = $('sync_speaker');
+    if (!select) return;
+    const items = [
+      {value:'auto', label:'Automatisk (følg aktiv gruppe)'},
+      {value:'off', label:'Ingen (kun manuel forsinkelse)'}
+    ];
+    for (const sp of (speakers || [])) {
+      if (sp && sp.uuid && sp.name) items.push({value:sp.uuid, label:sp.name+' ('+sp.ip+')'});
+    }
+    if (selected && !items.some(i => i.value === selected)) {
+      items.push({value:selected, label:selected});
+    }
+    const key = items.map(i => i.value+':'+i.label).join('|');
+    if (select.dataset.optionsKey !== key) {
+      select.innerHTML = '';
+      for (const item of items) {
+        const opt = document.createElement('option');
+        opt.value = item.value; opt.textContent = item.label;
+        select.appendChild(opt);
+      }
+      select.dataset.optionsKey = key;
+    }
+    select.value = selected || 'auto';
+  }
   const controls = new ControlQueue(patch => request('api/control', patch), state => {
     document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('selected', b.dataset.mode === state.mode));
     document.querySelectorAll('[data-pattern]').forEach(b => b.classList.toggle('selected', b.dataset.pattern === state.pattern));
     for (const id of ['color','brightness','speed','gain','punch','light_delay_ms']) $(id).value = state[id];
+    if ($('sync_speaker')) $('sync_speaker').value = state.sync_speaker || 'auto';
     $('coverColors').checked = state.cover_colors;
     $('brightnessValue').textContent = state.brightness+'%';
     $('speedValue').textContent = state.speed+'×';
@@ -78,6 +106,8 @@ if (typeof document !== 'undefined') {
     refreshing = true; const epoch = controls.epoch;
     try {
       const s = await request('api/status');
+      const sync = s.speaker_sync || s.sendspin?.speaker_sync || {};
+      syncSpeakerOptions(sync.speakers, controls.pending?.sync_speaker ?? s.sync_speaker ?? controls.state.sync_speaker);
       controls.accept(s, epoch);
       const trace = s.diagnostic || {};
       $('traceStatus').textContent = trace.active ? 'Måler · '+trace.remaining_s+' sek. tilbage · '+trace.events+' hændelser' : trace.available ? 'Måling klar · '+trace.events+' hændelser'+(trace.truncated?' · hukommelsesgrænse nået':'') : 'Ingen måling startet';
@@ -89,6 +119,16 @@ if (typeof document !== 'undefined') {
       $('status').textContent = (s.connected?'Twinkly forbundet · '+s.leds+' LED':'Twinkly ikke forbundet')+'\n'+(s.device_ip||'Angiv device_ip under konfiguration');
       const source = s.sendspin || {};
       $('source').textContent = sourceDescription(s);
+      if ($('syncHelp')) {
+        const eff = s.effective_delay_ms ?? s.light_delay_ms ?? 0;
+        $('syncHelp').textContent = sync.state === 'locked' && sync.speaker_name
+          ? 'Synkroniseret med '+sync.speaker_name+' · målt buffer: +'+sync.auto_delay_ms+' ms · samlet forsinkelse: '+eff+' ms.'
+          : sync.state === 'disabled'
+          ? 'Automatisk højttalersynk er slået fra · samlet forsinkelse: '+eff+' ms.'
+          : sync.speaker_name
+          ? 'Højttaler: '+sync.speaker_name+' ('+(sync.transport_state||'klar')+') · seneste buffer: +'+(sync.auto_delay_ms||0)+' ms · samlet: '+eff+' ms.'
+          : 'Automatisk højttalersynk måler Sonos/UPnP-bufferen digitalt i realtid uden mikrofon. Finjustering lægges oveni.';
+      }
       $('error').textContent = [s.error, source.error].filter(Boolean).join('\n');
       $('diagnostics').textContent = 'Ønsket: '+s.mode+' · Aktiv: '+s.applied_mode+' · Gendannet realtime: '+s.recoveries+' · Frames: '+(source.frames_rendered||0)+(source.roles?.includes('player@v1')?' · Lydpakker: '+(source.audio_chunks_received||0)+' (uden lydudgang)':'')+(s.bass_fresh?' · PCM-bas aktiv'+(s.bass_detector==='spectral_attack'?' · Spektral slagdetektor':'')+' · Basanslag: '+(s.bass_hits||0):s.spectrum_fresh?' · Spektrum-bas':' · Intet aktuelt lydsignal');
     } catch (error) {
@@ -100,6 +140,7 @@ if (typeof document !== 'undefined') {
     finally { refreshing = false; }
   }
   $('coverColors').addEventListener('change', () => controls.change({cover_colors:$('coverColors').checked}));
+  if ($('sync_speaker')) $('sync_speaker').addEventListener('change', () => controls.change({sync_speaker:$('sync_speaker').value}));
   document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => controls.change({mode:b.dataset.mode})));
   document.querySelectorAll('[data-pattern]').forEach(b => b.addEventListener('click', () => controls.change({mode:'music', pattern:b.dataset.pattern})));
   let punchTimer = null;
