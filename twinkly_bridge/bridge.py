@@ -17,7 +17,7 @@ from diagnostic import Diagnostic
 
 LOG = logging.getLogger("twinkly_bridge")
 MODES = {"color", "rainbow", "chase", "music", "off", "restore", "mood"}
-PATTERNS = {"spectrum", "mirror", "pulse", "wave", "particles", "tunnel"}
+PATTERNS = {"spectrum", "mirror", "pulse", "wave", "particles", "tunnel", "disco"}
 
 
 def validate_control(data):
@@ -136,6 +136,9 @@ def frame_colors(mode, count, phase, color, bands, pattern="spectrum", loudness=
                  punch=0, pulse=0, modulation=1, palette=None):
     energy = max(loudness, sum(bands) / len(bands) if bands else 0)
     bass = sum(bands[:max(1, len(bands)//4)]) / max(1, len(bands)//4) if bands else 0
+    total_b = sum(bands) if bands else 0
+    centroid = (sum(idx * b for idx, b in enumerate(bands)) / (len(bands) * total_b)) if total_b > 0.001 else 0.5
+    highs = (sum(bands[3*len(bands)//4:]) / max(1, len(bands) - 3*len(bands)//4)) if bands else 0.0
     def pixel(i):
         fraction = i / max(1, count - 1)
         if mode == "mood":
@@ -146,7 +149,7 @@ def frame_colors(mode, count, phase, color, bands, pattern="spectrum", loudness=
             intensity = max(0.0, 1 - ((fraction - phase) % 1) * 8)
             return tuple(round(c * intensity) for c in color)
         if mode == "music":
-            position = abs(2 * i - (count - 1)) / max(1, count - 1) if pattern == "mirror" else fraction
+            position = abs(2 * i - (count - 1)) / max(1, count - 1) if pattern in {"mirror", "disco"} else fraction
             level = bands[min(len(bands)-1, int(position * len(bands)))] if bands else 0
             if pattern == "pulse":
                 level = max(bass, energy)*(1-punch/100) + pulse*(punch/100)
@@ -158,14 +161,38 @@ def frame_colors(mode, count, phase, color, bands, pattern="spectrum", loudness=
             elif pattern == "tunnel":
                 distance = abs(fraction * 2 - 1)
                 level = energy * max(0, 1 - ((distance - phase * 2) % 1) * 6)
+            elif pattern == "disco":
+                pos = position
+                note = bands[min(len(bands)-1, int(pos * len(bands)))] if bands else 0
+                sweep_wave = 0.5 + 0.5 * math.sin(pos * 18 - phase * 25 + centroid * 10)
+                sweep_contrib = sweep_wave * (0.3 + 0.7 * energy)
+                shimmer = (max(0, math.sin(i * 19.3 + math.floor(phase * 40) * 11.7)) ** 8) * highs * 1.5
+                center_kick = max(0.0, 1.0 - pos * 2.5) * max(bass, pulse)
+                level = 0.45 * note + 0.35 * sweep_contrib + 0.35 * center_kick + shimmer
             if pattern != "pulse":
                 level *= modulation
+            level = min(1.0, max(0.0, level))
+            if pattern == "disco":
+                pos = position
+                if palette:
+                    tint = palette_color(palette, (pos + phase * 0.4 + centroid * 0.3) % 1.0)
+                    r, g, b = (round(c * level) for c in tint)
+                else:
+                    hue = (pos * 0.7 + phase * 1.2 + centroid * 0.5) % 1.0
+                    rgb = colorsys.hsv_to_rgb(hue, 0.95, level)
+                    r, g, b = (round(c * 255) for c in rgb)
+                if pulse > 0.5 and pos < 0.25:
+                    flare = min(1.0, ((pulse - 0.5) / 0.5) * (1.0 - pos * 4.0))
+                    r = min(255, round(r * (1 - flare) + 255 * flare))
+                    g = min(255, round(g * (1 - flare) + 245 * flare))
+                    b = min(255, round(b * (1 - flare) + 220 * flare))
+                return (r, g, b)
             if palette:
                 tint = palette_color(palette, position)
-                return tuple(round(c * min(1, max(0, level))) for c in tint)
+                return tuple(round(c * level) for c in tint)
             if pattern in {"pulse", "wave", "particles", "tunnel"}:
-                return tuple(round(c * min(1, max(0, level))) for c in color)
-            rgb = colorsys.hsv_to_rgb(0.72 - 0.72 * position, 1, min(1, max(0, level)))
+                return tuple(round(c * level) for c in color)
+            rgb = colorsys.hsv_to_rgb(0.72 - 0.72 * position, 1, level)
         else:
             rgb = colorsys.hsv_to_rgb((fraction + phase) % 1, 1, 1)
         return tuple(round(c * 255) for c in rgb)
@@ -547,7 +574,7 @@ def handler_for(bridge, ingress=False):
                 if self.path == "/api/diagnostic":
                     if data.get("action") == "start":
                         with bridge.lock:
-                            metadata = dict(version="0.2.1", settings=dict(bridge.settings), fps=bridge.fps)
+                            metadata = dict(version="0.2.2", settings=dict(bridge.settings), fps=bridge.fps)
                         bridge.diagnostic.start(metadata)
                     elif data.get("action") == "stop": bridge.diagnostic.stop()
                     else: raise ValueError("Expected start or stop")

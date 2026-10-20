@@ -56,7 +56,7 @@ def decode_legacy_frame(packet, bins):
 
 class FrameBuffer:
     """Bounded timeline; lookahead data is rendered at playback time, never on arrival."""
-    def __init__(self, bridge, maximum=4096):
+    def __init__(self, bridge, maximum=8192):
         self.bridge, self.maximum = bridge, maximum
         self.frames = []
         self.serial = 0
@@ -68,7 +68,7 @@ class FrameBuffer:
 
     def add(self, frame, due, now=None):
         now = time.monotonic() if now is None else now
-        reason = "past_due" if due < now else "too_far" if due > now+30 else "full" if len(self.frames)>=self.maximum else ""
+        reason = "past_due" if due < now else "too_far" if due > now+120 else "full" if len(self.frames)>=self.maximum else ""
         self.bridge.diagnostic.add("schedule", role="pcm" if hasattr(frame,"bass_rms") else "visualizer",
             timestamp_us=frame.timestamp_us, lead_ms=round((due-now)*1000,3),
             accepted=not bool(reason), reason=reason, queued=len(self.frames))
@@ -164,6 +164,8 @@ class SendspinSource:
         return result
 
     def note_stream_time(self, unadjusted_due, role="visualizer"):
+        if self.player_enabled and role != "pcm":
+            return
         with self.lock:
             prev = self.last_unadjusted_due.get(role)
             restart = self.stream_start_at is None or (
@@ -277,7 +279,7 @@ class SendspinSource:
         client = SendspinClient(identity, "Twinkly Bridge", self.roles, pairing_store=store,
             player_support=self.player_support if self.player_enabled else None,
             artwork_support=self.artwork_support, visualizer_support=self.support, session=session,
-            device_info=DeviceInfo(product_name="Twinkly Bridge", manufacturer="Kiosk companion", software_version="0.2.1"))
+            device_info=DeviceInfo(product_name="Twinkly Bridge", manufacturer="Kiosk companion", software_version="0.2.2"))
         self.clock_client = client
         disconnected = asyncio.Event()
         client.add_artwork_listener(lambda channel, data: self.bridge.artwork(data) if channel == 0 else None)
@@ -325,7 +327,7 @@ class SendspinSource:
             "name": "Twinkly Bridge", "version": 1, "supported_roles": [role.value for role in self.roles],
             "artwork@v1_support": self.artwork_support.to_dict(),
             "visualizer@v1_support": self.support.to_dict(),
-            "device_info": {"product_name": "Twinkly Bridge", "software_version": "0.2.1"}}
+            "device_info": {"product_name": "Twinkly Bridge", "software_version": "0.2.2"}}
         state_payload = {"available": True, "state": "synchronized"}
         if self.player_enabled:
             hello_payload["player@v1_support"] = self.player_support.to_dict()

@@ -1,3 +1,9 @@
+# 0.2.2
+
+- Fix visualizer spectrum frame dropping: widen `FrameBuffer` lookahead ceiling from 30 s to 120 s and capacity to 8192 frames, preventing Music Assistant visualizer packets (~25–34 s lead time) from being discarded with `"too_far"`.
+- Fix stream start timing: only allow real PCM audio clocks (`role == "pcm"`) to establish `stream_start_at` when player is enabled, preventing future visualizer timestamps from skewing speaker buffer synchronization.
+- Add new `disco` music pattern (`Disco Dynamics`): center-mirrored layout with full 32-band note response, spectral centroid frequency sweeps, buildup shimmer, core bass explosion with warm-white center flare on heavy kicks, and dynamic disco hue cycling / album art palette blending.
+
 # 0.2.1
 
 - Eliminate periodic LED stutter and dropped beats during active music streaming: update `last_rt_time` on every UDP frame so `xled_plus` does not block the 20 FPS render thread every 5 seconds with redundant `POST /xled/v1/led/mode` HTTP requests.
