@@ -1,3 +1,10 @@
+# 0.2.1
+
+- Eliminate periodic LED stutter and dropped beats during active music streaming: update `last_rt_time` on every UDP frame so `xled_plus` does not block the 20 FPS render thread every 5 seconds with redundant `POST /xled/v1/led/mode` HTTP requests.
+- Increase passive `ensure_rt()` mode-check interval to 15 seconds with transient HTTP timeout tolerance so a slow Wi-Fi reply on a background check never tears down the active UDP socket for 5 seconds.
+- Track Sendspin stream timestamps independently per role (`pcm` vs. `visualizer`) so PCM lookahead (~4.5 s) and visualizer lookahead (~0.3 s) never falsely trigger stream-start resets.
+- Retain spectral `low_flux` onset for 40 ms (two 20 ms PCM windows) in `BassEnvelope` so kick drums straddling the boundary between the FFT onset and biquad RMS peak are not skipped.
+
 # 0.2.0
 
 - Add 100% digital, microphone-free UPnP/Sonos speaker buffer synchronization (`SpeakerSync`) to automatically align Twinkly LEDs with the exact millisecond audio leaves the physical speaker.

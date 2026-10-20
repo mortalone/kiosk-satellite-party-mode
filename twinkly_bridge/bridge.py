@@ -201,8 +201,18 @@ def open_device(host):
             response = self.session.post("led/out/brightness", json={"value": brightness, "type": "A", "mode": "enabled" if enabled else "disabled"})
             self.check_response(response)
 
-        def ensure_rt(self, force=False):
-            actual = self.get_mode()["mode"]
+        def show_rt_frame(self, frame):
+            super().show_rt_frame(frame)
+            self.last_rt_time = time.time()
+
+        def ensure_rt(self, force=False, allow_transient_error=False):
+            try:
+                actual = self.get_mode()["mode"]
+            except Exception as exc:
+                if allow_transient_error and not force and self.curr_mode == "rt":
+                    LOG.debug("Skipping transient RT mode check failure: %s", exc)
+                    return False
+                raise
             recovered = actual != "rt" and self.curr_mode == "rt"
             if force or actual != "rt":
                 self.set_mode("rt")
@@ -411,11 +421,14 @@ class Bridge:
                             device.set_brightness(settings["brightness"])
                             last_brightness = settings["brightness"]
                         if hasattr(device, "ensure_rt") and (time.monotonic() >= next_rt_check or mode != applied_mode):
-                            recovered = device.ensure_rt(force=mode != applied_mode)
+                            try:
+                                recovered = device.ensure_rt(force=mode != applied_mode, allow_transient_error=True)
+                            except TypeError:
+                                recovered = device.ensure_rt(force=mode != applied_mode)
                             if recovered:
                                 with self.lock:
                                     self.info["recoveries"] += 1
-                            next_rt_check = time.monotonic() + 2
+                            next_rt_check = time.monotonic() + 15
                         now = time.monotonic()
                         bands, loudness, peak, bass_rms, pcm_pulse = self.audio_snapshot(now, settings["punch"])
                         dt, last_frame = now-last_frame, now
@@ -450,7 +463,8 @@ class Bridge:
                     device, last_brightness = None, None
                     applied_revision = -1
                     next_retry = time.monotonic() + 5
-                self.wake.wait(1 / self.fps if mode not in {"restore", "off"} else 0.2)
+                wait_s = max(0.002, (1 / self.fps) - (time.monotonic() - last_frame)) if mode not in {"restore", "off"} else 0.2
+                self.wake.wait(wait_s)
         finally:
             if device is not None and original is not None and mode != "restore":
                 try:
@@ -533,7 +547,7 @@ def handler_for(bridge, ingress=False):
                 if self.path == "/api/diagnostic":
                     if data.get("action") == "start":
                         with bridge.lock:
-                            metadata = dict(version="0.2.0", settings=dict(bridge.settings), fps=bridge.fps)
+                            metadata = dict(version="0.2.1", settings=dict(bridge.settings), fps=bridge.fps)
                         bridge.diagnostic.start(metadata)
                     elif data.get("action") == "stop": bridge.diagnostic.stop()
                     else: raise ValueError("Expected start or stop")

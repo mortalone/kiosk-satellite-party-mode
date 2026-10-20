@@ -97,7 +97,7 @@ class BassEnvelope:
     def __init__(self):
         self.previous=None;self.baseline=None;self.last_at=None;self.hit_at=None;self.strength=0.
         self.flux_history=deque(maxlen=50);self.onset_threshold=0.
-        self.attack_at=None
+        self.attack_at=None;self.flux_at=None;self.flux_strength=0.
     def feed(self,rms,at,onset=None):
         if self.last_at is not None and (at<self.last_at or at-self.last_at>.3):self.__init__()
         dt=.02 if self.last_at is None else max(.001,min(.25,at-self.last_at))
@@ -111,15 +111,19 @@ class BassEnvelope:
             ready=self.hit_at is None or at-self.hit_at>=.12
             if attack_flux>.025 and attack_fraction>.003:
                 self.attack_at=at
+            if low_flux>self.onset_threshold and bass_fraction>.25:
+                self.flux_at=at
+                self.flux_strength=min(1.,max(.55,low_flux/max(.12,self.onset_threshold)*.55))
             sharp=self.attack_at is not None and at-self.attack_at<=.06
+            recent_flux=self.flux_at is not None and at-self.flux_at<=.04
             # Require a new bass rise AND a sharp attack outside the bass band.
             # No tempo oscillator: silence, held notes and spectral decay cannot
             # generate a pulse merely because the refractory interval elapsed.
             rising=self.previous is not None and rms>self.previous*1.03
             if (ready and rising and rms>max(.00001,(self.baseline or 0)*1.15)
-                    and bass_fraction>.25 and low_flux>self.onset_threshold and sharp):
-                self.strength=min(1.,max(.55,low_flux/max(.12,self.onset_threshold)*.55))
-                self.hit_at=at;hit=True
+                    and bass_fraction>.25 and recent_flux and sharp):
+                self.strength=self.flux_strength
+                self.hit_at=at;self.flux_at=None;hit=True
             self.flux_history.append(low_flux)
         elif self.previous is not None:
             rising=rms>self.previous*1.12

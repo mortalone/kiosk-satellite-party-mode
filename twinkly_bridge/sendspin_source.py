@@ -56,7 +56,7 @@ def decode_legacy_frame(packet, bins):
 
 class FrameBuffer:
     """Bounded timeline; lookahead data is rendered at playback time, never on arrival."""
-    def __init__(self, bridge, maximum=2048):
+    def __init__(self, bridge, maximum=4096):
         self.bridge, self.maximum = bridge, maximum
         self.frames = []
         self.serial = 0
@@ -140,7 +140,7 @@ class SendspinSource:
         self.stopping = threading.Event()
         self.lock = threading.Lock()
         self.stream_start_at = None
-        self.last_unadjusted_due = None
+        self.last_unadjusted_due = {}
         self.speaker_sync = SpeakerSync(options, directory=directory, on_delay=self.set_auto_delay, diagnostic=bridge.diagnostic)
         if self.speaker_sync.info["auto_delay_ms"] > 0 and (self.speaker_sync.candidate_subnets() or self.speaker_sync.candidate_endpoints()):
             self.auto_delay = self.speaker_sync.info["auto_delay_ms"] / 1000
@@ -163,14 +163,17 @@ class SendspinSource:
         result["speaker_sync"] = self.speaker_sync.status()
         return result
 
-    def note_stream_time(self, unadjusted_due):
+    def note_stream_time(self, unadjusted_due, role="visualizer"):
         with self.lock:
+            prev = self.last_unadjusted_due.get(role)
             restart = self.stream_start_at is None or (
-                self.last_unadjusted_due is not None and abs(unadjusted_due - self.last_unadjusted_due) > 2.5
+                prev is not None and (unadjusted_due - prev < -2.5 or unadjusted_due - prev > 8.0)
             )
             if restart:
                 self.stream_start_at = unadjusted_due
-            self.last_unadjusted_due = unadjusted_due
+                self.last_unadjusted_due = {role: unadjusted_due}
+            else:
+                self.last_unadjusted_due[role] = unadjusted_due
         if restart:
             self.speaker_sync.on_stream_start(unadjusted_due)
 
@@ -201,7 +204,7 @@ class SendspinSource:
             return
         for frame in frames:
             unadjusted_due = time.monotonic() + (client.compute_play_time(frame.timestamp_us) - client.now_us()) / 1e6
-            self.note_stream_time(unadjusted_due)
+            self.note_stream_time(unadjusted_due, "visualizer")
             due = unadjusted_due + self.delay
             if self.buffer.add(frame, due):
                 with self.lock:
@@ -218,7 +221,7 @@ class SendspinSource:
         self.bridge.diagnostic.add("delay", milliseconds=round(value * 1000),
             manual_ms=round(self.manual_delay * 1000), auto_ms=round(self.auto_delay * 1000),
             shifted_frames=len(self.buffer.frames))
-        if shift:
+        if abs(shift) > 0.005:
             self.buffer.frames = [(due+shift, serial, frame) for due,serial,frame in self.buffer.frames]
             heapq.heapify(self.buffer.frames)
 
@@ -233,13 +236,13 @@ class SendspinSource:
     def clear_stream(self):
         with self.lock:
             self.stream_start_at = None
-            self.last_unadjusted_due = None
+            self.last_unadjusted_due = {}
         self.speaker_sync.on_stream_clear()
         self.buffer.clear(); self.bass_analyzer.reset()
 
     def analyze_pcm(self, data, timestamp, rate, channels, bits, unadjusted_due_fn):
         first_due = unadjusted_due_fn(timestamp)
-        self.note_stream_time(first_due)
+        self.note_stream_time(first_due, "pcm")
         for frame in self.bass_analyzer.feed(data, timestamp, rate, channels, bits):
             self.buffer.add(frame, unadjusted_due_fn(frame.timestamp_us) + self.delay)
 
@@ -274,7 +277,7 @@ class SendspinSource:
         client = SendspinClient(identity, "Twinkly Bridge", self.roles, pairing_store=store,
             player_support=self.player_support if self.player_enabled else None,
             artwork_support=self.artwork_support, visualizer_support=self.support, session=session,
-            device_info=DeviceInfo(product_name="Twinkly Bridge", manufacturer="Kiosk companion", software_version="0.2.0"))
+            device_info=DeviceInfo(product_name="Twinkly Bridge", manufacturer="Kiosk companion", software_version="0.2.1"))
         self.clock_client = client
         disconnected = asyncio.Event()
         client.add_artwork_listener(lambda channel, data: self.bridge.artwork(data) if channel == 0 else None)
@@ -322,7 +325,7 @@ class SendspinSource:
             "name": "Twinkly Bridge", "version": 1, "supported_roles": [role.value for role in self.roles],
             "artwork@v1_support": self.artwork_support.to_dict(),
             "visualizer@v1_support": self.support.to_dict(),
-            "device_info": {"product_name": "Twinkly Bridge", "software_version": "0.2.0"}}
+            "device_info": {"product_name": "Twinkly Bridge", "software_version": "0.2.1"}}
         state_payload = {"available": True, "state": "synchronized"}
         if self.player_enabled:
             hello_payload["player@v1_support"] = self.player_support.to_dict()
@@ -394,7 +397,7 @@ class SendspinSource:
                     frame = decode_legacy_frame(message.data, bins)
                     if frame is not None:
                         unadjusted_due = clock.compute_client_time(frame.timestamp_us) / 1e6
-                        self.note_stream_time(unadjusted_due)
+                        self.note_stream_time(unadjusted_due, "visualizer")
                         due = unadjusted_due + self.delay
                         if self.buffer.add(frame, due):
                             with self.lock:
