@@ -164,25 +164,25 @@ def frame_colors(mode, count, phase, color, bands, pattern="spectrum", loudness=
             elif pattern == "disco":
                 pos = position
                 note = bands[min(len(bands)-1, int(pos * len(bands)))] if bands else 0
-                sweep_wave = 0.5 + 0.5 * math.sin(pos * 18 - phase * 25 + centroid * 10)
-                sweep_contrib = sweep_wave * (0.3 + 0.7 * energy)
-                shimmer = (max(0, math.sin(i * 19.3 + math.floor(phase * 40) * 11.7)) ** 8) * highs * 1.5
-                center_kick = max(0.0, 1.0 - pos * 2.5) * max(bass, pulse)
-                level = 0.45 * note + 0.35 * sweep_contrib + 0.35 * center_kick + shimmer
+                sweep_wave = 0.5 + 0.5 * math.sin(pos * 10 - phase * 12)
+                sweep_contrib = sweep_wave * (0.25 + 0.75 * energy * (0.6 + 0.8 * centroid))
+                shimmer = (0.5 + 0.5 * math.sin(i * 1.85 + phase * 20)) ** 8 * highs * 1.4
+                center_kick = max(0.0, 1.0 - pos * 3.0) * pulse
+                level = 0.40 * note + 0.35 * sweep_contrib + 0.45 * center_kick + shimmer
             if pattern != "pulse":
                 level *= modulation
             level = min(1.0, max(0.0, level))
             if pattern == "disco":
                 pos = position
                 if palette:
-                    tint = palette_color(palette, (pos + phase * 0.4 + centroid * 0.3) % 1.0)
+                    tint = palette_color(palette, (pos * 0.5 + phase * 0.4) % 1.0)
                     r, g, b = (round(c * level) for c in tint)
                 else:
-                    hue = (pos * 0.7 + phase * 1.2 + centroid * 0.5) % 1.0
+                    hue = (pos * 0.4 + phase * 0.8 + centroid * 0.2) % 1.0
                     rgb = colorsys.hsv_to_rgb(hue, 0.95, level)
                     r, g, b = (round(c * 255) for c in rgb)
-                if pulse > 0.5 and pos < 0.25:
-                    flare = min(1.0, ((pulse - 0.5) / 0.5) * (1.0 - pos * 4.0))
+                if pulse > 0.35 and pos < 0.22:
+                    flare = min(1.0, ((pulse - 0.35) / 0.65) * (1.0 - pos * 4.5))
                     r = min(255, round(r * (1 - flare) + 255 * flare))
                     g = min(255, round(g * (1 - flare) + 245 * flare))
                     b = min(255, round(b * (1 - flare) + 220 * flare))
@@ -574,7 +574,7 @@ def handler_for(bridge, ingress=False):
                 if self.path == "/api/diagnostic":
                     if data.get("action") == "start":
                         with bridge.lock:
-                            metadata = dict(version="0.2.2", settings=dict(bridge.settings), fps=bridge.fps)
+                            metadata = dict(version="0.2.3", settings=dict(bridge.settings), fps=bridge.fps)
                         bridge.diagnostic.start(metadata)
                     elif data.get("action") == "stop": bridge.diagnostic.stop()
                     else: raise ValueError("Expected start or stop")

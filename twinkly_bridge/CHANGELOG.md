@@ -1,3 +1,8 @@
+# 0.2.3
+
+- Fix intermittent stutter / playback freeze: in `SpeakerSync`, prevent minor UPnP probe network timing jitter (<150 ms) from constantly re-shifting the queued frame timeline while locked, and account for the integer second progression of `<RelTime>` so normal playback does not falsely break lock.
+- Smooth `disco` pattern motion: remove noisy frame-to-frame centroid phase modulation from the traveling wave and hue calculations, and replace stepped `math.floor` shimmer with continuous sine sparkles for silky-smooth running light.
+
 # 0.2.2
 
 - Fix visualizer spectrum frame dropping: widen `FrameBuffer` lookahead ceiling from 30 s to 120 s and capacity to 8192 frames, preventing Music Assistant visualizer packets (~25–34 s lead time) from being discarded with `"too_far"`.

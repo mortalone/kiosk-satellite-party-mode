@@ -461,6 +461,9 @@ class SpeakerSync:
         delay_ms = max(0, min(8000, int(round(delay_ms))))
         with self.lock:
             previous = self.info["auto_delay_ms"]
+            was_locked = self.info["locked"]
+            if was_locked and locked and abs(delay_ms - previous) < 150:
+                return
             self.persisted_delay_ms = delay_ms
             self.info.update(
                 state="locked" if locked else "measuring",
@@ -548,8 +551,11 @@ class SpeakerSync:
         if raw_delta > 8.0:
             return 2.0
 
-        if locked and abs(raw_delta * 1000 - self.info["auto_delay_ms"]) < 450:
-            return 6.0
+        if locked:
+            current_delay_s = self.info["auto_delay_ms"] / 1000.0
+            error = raw_delta - current_delay_s
+            if -0.4 <= error <= 1.8:
+                return 6.0
 
         prev_rel = rel_s
         prev_at = now
