@@ -50,6 +50,7 @@ final class PartyView extends FrameLayout {
     private View queueCanvas, progressCanvas;
     private boolean hardwareCanvas;
     boolean hardwareCanvas() { return hardwareCanvas; }
+    void setDetail(int detail) { effects.setDetail(detail); invalidate(); }
     void setEconomy(boolean economy) { effects.setEconomy(economy); }
     double elapsedSeconds() { return model.elapsed + (playing ? Math.max(0, SystemClock.elapsedRealtime() - anchor) / 1000.0 : 0); }
     private void dirtyQueue() { if (queueCanvas != null) queueCanvas.invalidate(); if (progressCanvas != null) progressCanvas.invalidate(); }

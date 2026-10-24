@@ -90,6 +90,9 @@ public final class PartyModePlugin implements KioskPlugin {
     private String partyEffect = "off";
     private boolean partyGuestsFollow = true, partyQueueVisible = true;
     private int gain = 3, fps = 20;
+    private int reportedDetail = -1;
+    private static final String[] DETAIL_NAMES = {"Følg Eco-indstilling", "Lav", "Normal", "Høj"};
+    private int detailLevel; // 0 follows the existing Eco/normal setting
     private boolean settingFpsEconomy;
     private boolean allowSearch = true, searchLibrary = true, searchSimilar = true, searchAi = true, currentSimilar = true, allowQueueTap, showQuickActions, showEqControls, eqPending;
     private boolean dspPending, dspPublished;
@@ -221,6 +224,8 @@ public final class PartyModePlugin implements KioskPlugin {
         fps = Math.max(10, Math.min(30, fps));
         settingFpsEconomy = setting(settings, "refreshRate", "20 FPS").contains("Eco");
         SharedPreferences prefs = context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE);
+        detailLevel = Math.max(0, Math.min(3, prefs.getInt("visual_detail", 0)));
+        reportedDetail = -1;
         partyEffect = PartySignal.effect(savedChoice(prefs, "effect", setting(settings, "effect", "off")));
         screenControls = savedChoice(prefs, "controls", normalizeControls(setting(settings, "screenControls", "Menu only")));
         String configuredVolume = setting(settings, "volumeControls", "Buttons");
@@ -258,7 +263,11 @@ public final class PartyModePlugin implements KioskPlugin {
     @Override public synchronized void execute(String command, Map<String, Object> arguments) {
         main.post(() -> {
             if (host == null || context == null) return;
-            if ("show".equals(command)) { activation.show(); pollMedia(); updatePresentation(); }
+            if ("detailAuto".equals(command)) setDetailLevel(0);
+            else if ("detailLow".equals(command)) setDetailLevel(1);
+            else if ("detailNormal".equals(command)) setDetailLevel(2);
+            else if ("detailHigh".equals(command)) setDetailLevel(3);
+            else if ("show".equals(command)) { activation.show(); pollMedia(); updatePresentation(); }
             else if ("hide".equals(command)) { activation.hide(); closePresentation(); }
             else if (command.startsWith("partyEffect")) setPartyEffect(command.substring(11).toLowerCase(java.util.Locale.ROOT));
             else if ("partyGuestsFollow".equals(command) || "partyGuestsHide".equals(command)) setPartyGuests("partyGuestsFollow".equals(command));
@@ -308,6 +317,12 @@ public final class PartyModePlugin implements KioskPlugin {
         if (event.startsWith("switch.menu_")) {
             final String key = event.substring("switch.menu_".length());
             main.post(() -> { if (host != null && context != null) setMenuCategory(key, Boolean.TRUE.equals(payload.get("on"))); }); return;
+        }
+        if ("select.visual_detail".equals(event)) {
+            main.post(() -> {
+                if (host == null || context == null) return;
+                for (int i = 0; i < DETAIL_NAMES.length; i++) if (DETAIL_NAMES[i].equals(payload.get("option"))) setDetailLevel(i);
+            }); return;
         }
         if ("select.effect".equals(event)) {
             main.post(() -> { if (host != null && context != null) setPartyEffect(String.valueOf(payload.get("option"))); }); return;
@@ -424,6 +439,11 @@ public final class PartyModePlugin implements KioskPlugin {
         }
     }
     private void publishPartyState() {
+        if (host != null && reportedDetail != detailLevel) {
+            try { host.publishSelect("visual_detail", "Party detaljegrad", DETAIL_NAMES, DETAIL_NAMES[detailLevel]); reportedDetail = detailLevel; }
+            catch (Exception error) { host.log("Could not publish detail: " + error.getMessage()); }
+        }
+
         if (host == null) return;
         if (!guestPage.equals(reportedGuestPage)) {
             try { host.publishSelect("guest_page", "Guest QR destination", new String[]{"Music Assistant", "Party guest page"}, guestPage); reportedGuestPage = guestPage; }
@@ -503,7 +523,7 @@ public final class PartyModePlugin implements KioskPlugin {
             v.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(), insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
             return insets;
         });
-        partyView = new PartyView(activity, true); partyView.setEconomy(settingFpsEconomy); partyView.setPresentation(partyEffect, partyQueueVisible);
+        partyView = new PartyView(activity, true); partyView.setEconomy(settingFpsEconomy); if (detailLevel != 0) partyView.setDetail(detailLevel); partyView.setPresentation(partyEffect, partyQueueVisible);
         partyView.setTrackAction(allowQueueTap ? this::playQueueTrack : null);
         partyView.setSimilarAction(allowSearch && currentSimilar ? this::showSimilar : null);
         FrameLayout.LayoutParams body = new FrameLayout.LayoutParams(-1, -1);
@@ -1440,12 +1460,29 @@ public final class PartyModePlugin implements KioskPlugin {
         else context.registerReceiver(partyAudioReceiver, filter);
     }
 
+    private void setDetailLevel(int value) {
+        detailLevel = value;
+        context.getSharedPreferences(PARTY_PREFS, Context.MODE_PRIVATE).edit().putInt("visual_detail", value).apply();
+        if (partyView != null) {
+            if (value == 0) partyView.setEconomy(settingFpsEconomy);
+            else partyView.setDetail(value);
+        }
+        publishPartyState();
+        host.status("Party detaljegrad: " + new String[]{"Følg Eco-indstilling", "Lav", "Normal", "Høj"}[value] + " (gemt)", false);
+    }
+
     private void showPartyMenu(View anchor) {
         Activity a = activeKioskActivity(); if (a == null || !menuVisible()) return;
         LinearLayout body = panelBody(a), rows = panelBody(a); ScrollView scroll = new ScrollView(a);
         scroll.setVerticalScrollBarEnabled(false); scroll.addView(rows); body.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         if (menuCategories.contains("visuals")) {
             panelHeading(rows, "VISUALISERING");
+            String[] details = {"Følg Eco-indstilling", "Lav", "Normal", "Høj"};
+            for (int i = 0; i < details.length; i++) {
+                final int level = i;
+                addPanelAction(rows, "Detaljegrad · " + details[i], detailLevel == i, () -> { setDetailLevel(level); showPartyMenu(anchor); });
+            }
+
             String[] ids = {"off", "spectrum", "mirror", "radial", "wave", "particles", "tunnel", "lyrics", "discolyrics"};
             String[] names = {"Ingen visualisering", "Neon Spectrum", "Mirror Spectrum", "Radial Pulse", "Waveform", "Star Particles", "Neon Tunnel", "Lyrics · syng med", "Disco Lyrics · neon og pulser"};
             for (int i = 0; i < ids.length; i++) {

@@ -3,7 +3,7 @@
   "apiVersion": 1,
   "id": "party-mode",
   "name": "Party Mode",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "minAndroidSdk": 26,
   "entryClass": "me.jxl.kiosk.plugins.partymode.PartyModePlugin",
   "description": "Full-screen Party with selectable guest QR, HA-controlled menu categories and native music search.",
@@ -19,7 +19,7 @@
     {
       "key": "speakerEntity",
       "type": "entity",
-      "title": "Speaker / h\u00f8jttaler",
+      "title": "Speaker / højttaler",
       "default": "",
       "group": "Party",
       "description": "Music Assistant HA media_player for the speaker group whose queue Party should follow."
@@ -104,7 +104,7 @@
       "title": "Volume controls",
       "default": "Buttons",
       "group": "Presentation",
-      "description": "Compact \u2212/+ controls by default, or a slim tinted slider. Independent of playback controls and visualization gain.",
+      "description": "Compact −/+ controls by default, or a slim tinted slider. Independent of playback controls and visualization gain.",
       "options": [
         "Off",
         "Buttons",

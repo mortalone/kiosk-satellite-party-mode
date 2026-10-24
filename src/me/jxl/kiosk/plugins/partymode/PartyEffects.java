@@ -15,15 +15,25 @@ final class PartyEffects {
     private final RectF rect = new RectF();
     private final int[] palette = new int[256];
     private float[] target, levels, waveform, cosines, sines;
-    private boolean economy;
+    private int particleCount = 48, ringCount = 10;
     PartyEffects() {
         float[] hsv = new float[] {0, 0.88f, 1};
         for (int i = 0; i < palette.length; i++) { hsv[0] = 165 + i * 185f / 255; palette[i] = Color.HSVToColor(hsv); }
         setEconomy(false);
     }
     void setEconomy(boolean enabled) {
-        economy = enabled; int count = enabled ? 32 : 48;
-        target = new float[count]; levels = new float[count]; waveform = new float[enabled ? 64 : 96];
+        setBudget(enabled ? 32 : 48, enabled ? 64 : 96, enabled ? 28 : 48, enabled ? 7 : 10);
+    }
+    void setDetail(int detail) {
+        setBudget(detail == 1 ? 24 : detail == 3 ? 64 : 48,
+                detail == 1 ? 48 : detail == 3 ? 128 : 96,
+                detail == 1 ? 24 : detail == 3 ? 80 : 48,
+                detail == 1 ? 6 : detail == 3 ? 16 : 10);
+    }
+    private void setBudget(int count, int samples, int particles, int rings) {
+        particleCount = particles; ringCount = rings;
+        if (target != null && target.length == count && waveform.length == samples) return;
+        target = new float[count]; levels = new float[count]; waveform = new float[samples];
         cosines = new float[count]; sines = new float[count];
         for (int i = 0; i < count; i++) { double angle = Math.PI * 2 * i / count - Math.PI / 2; cosines[i] = (float)Math.cos(angle); sines[i] = (float)Math.sin(angle); }
     }
@@ -91,22 +101,22 @@ final class PartyEffects {
                 paint.setStrokeWidth(layer == 0 ? 3 : 8); c.drawPath(path, paint);
             }
         } else if ("particles".equals(mode)) {
-            for (int i = 0; i < (economy ? 28 : 48); i++) {
+            for (int i = 0; i < particleCount; i++) {
                 float strength = levels[i % levels.length];
                 float phase = (float)((time * (0.08f + strength * 0.13f) + i * 0.618034f) % 1);
                 double angle = i * 2.39996 + time * 0.08;
                 float distance = phase * Math.max(width, height) * 0.70f;
                 float x = width / 2 + (float) Math.cos(angle) * distance;
                 float y = height / 2 + (float) Math.sin(angle) * distance;
-                paint.setColor(color(i / 48f, (int) (220 * strength * (1 - phase))));
+                paint.setColor(color(i / (float)particleCount, (int) (220 * strength * (1 - phase))));
                 c.drawCircle(x, y, 2 + strength * 12, paint);
             }
         } else if ("tunnel".equals(mode)) {
             paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(2 + energy * 9);
-            for (int ring = 0; ring < (economy ? 7 : 10); ring++) {
-                float phase = (float)((ring / 10f + time * 0.07f) % 1);
+            for (int ring = 0; ring < ringCount; ring++) {
+                float phase = (float)((ring / (float)ringCount + time * 0.07f) % 1);
                 float radius = phase * Math.max(width, height) * 0.7f;
-                paint.setColor(color(ring / 10f, (int) (200 * levels[ring % levels.length] * (1 - phase))));
+                paint.setColor(color(ring / (float)ringCount, (int) (200 * levels[ring % levels.length] * (1 - phase))));
                 rect.set(width / 2 - radius, height / 2 - radius, width / 2 + radius, height / 2 + radius);
                 c.drawOval(rect, paint);
             }

@@ -172,3 +172,7 @@ Under the Kiosk device, **MA EQ-preset** lists the presets saved with Music Assi
 **Tilpasset EQ** is the current manual configuration, not a reset action. **DSP fra** disables DSP without deleting filters. **Gendan oprindelig EQ** restores the complete filter chain saved before the first HA DSP change for that MA server/player. A restored preset may appear as Tilpasset EQ because MA's DSP-save endpoint clears preset associations. The older Party Punch screen action has its own per-Sonos backup and restore; it is independent of these MA preset controls.
 
 A saved DSP configuration does not prove the audio path applies it: playback must be routed through MA, and native grouping can prevent DSP. Sonos Loudness is a separate speaker setting, exposed by HA's **Sonos** integration alongside Bass and Treble; use those device entities directly. MA volume normalization is another separate function.
+
+## Justerbar detaljegrad (0.1.19)
+
+Selectable rendering detail through the saved HA select “Party detaljegrad” and Party menu → Visualisering. Low: 24 bands/particles, 48 waveform samples, 6 tunnel rings. Normal: 48 bands/particles, 96 samples, 10 rings. High: 64 bands, 80 particles, 128 samples, 16 rings. Follow Eco setting is the default. FPS, gain and speaker sync are unchanged. Still 20 settings. Text and artwork retain their normal resolution.

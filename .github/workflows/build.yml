@@ -34,6 +34,8 @@ jobs:
         run: |
           SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -1)
           yes | "$SDKMANAGER" "platforms;android-35" >/dev/null
+      - name: Verify detail changes and legacy Eco
+        run: python3 tests/test_detail.py
       - name: Build plugin
         run: python3 tools/build.py --android-platform 35
       - name: Verify queue, guest access, QR, audio signals and visibility
