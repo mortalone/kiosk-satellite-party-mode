@@ -188,6 +188,8 @@ class SpeakerSync:
         self.speakers = []
         self.cached_ip = ""
         self.persisted_delay_ms = 0
+        self.last_track_uri = ""
+        self.last_measure_at = 0.0
         self._load_cache()
         enabled = self.selection.lower() not in {"off", "none", "false", "disabled"}
         initial_delay = self.persisted_delay_ms if enabled else 0
@@ -464,7 +466,8 @@ class SpeakerSync:
             was_locked = self.info["locked"]
             if was_locked and locked and abs(delay_ms - previous) < 150:
                 return
-            self.persisted_delay_ms = delay_ms
+            if locked:
+                self.persisted_delay_ms = delay_ms
             self.info.update(
                 state="locked" if locked else "measuring",
                 speaker_name=speaker["name"],
@@ -484,7 +487,8 @@ class SpeakerSync:
                 transport=transport_state,
                 locked=locked,
             )
-        self._save_cache(speaker_ip=speaker["ip"], auto_delay_ms=delay_ms)
+        if locked:
+            self._save_cache(speaker_ip=speaker["ip"], auto_delay_ms=delay_ms)
         if self.on_delay is not None and delay_ms != previous:
             self.on_delay(delay_ms)
 
@@ -515,7 +519,9 @@ class SpeakerSync:
         state = info.get("state") or ""
         rel_str = info.get("rel_str") or ""
         rel_s = info.get("rel_s")
+        uri = info.get("uri") or ""
         now = info.get("sampled_at") or time.monotonic()
+        is_ugp = "/ugp/" in uri.lower() or uri.lower().startswith("x-rincon-mp3radio:")
 
         with self.lock:
             self.info.update(
@@ -532,30 +538,56 @@ class SpeakerSync:
             return 0.25 if stream_start is not None else 2.5
 
         if state == "TRANSITIONING":
-            elapsed_ms = max(self.persisted_delay_ms or 3500, int((now - stream_start) * 1000))
+            fallback = self.persisted_delay_ms if (self.persisted_delay_ms and (not is_ugp or 3000 <= self.persisted_delay_ms <= 4600)) else (3800 if is_ugp else 3500)
+            elapsed_ms = max(fallback, int((now - stream_start) * 1000))
             self.apply_measured_delay(min(6000, elapsed_ms), target, rel_str, state, locked=False)
             return 0.08
 
         if rel_s is None:
             return 1.0
 
+        # Reset lock if URI changed
+        if uri and uri != self.last_track_uri:
+            self.last_track_uri = uri
+            with self.lock:
+                self.info["locked"] = False
+                locked = False
+                self.last_measure_at = 0.0
+
+        # Periodic drift re-measurement: re-lock every 25 seconds
+        if locked:
+            if now - self.last_measure_at > 25.0:
+                with self.lock:
+                    self.info["locked"] = False
+                    locked = False
+            else:
+                return 6.0
+
+        # Determine reliable baseline delay for UGP or standard streams
+        if is_ugp:
+            if self.persisted_delay_ms and 3000 <= self.persisted_delay_ms <= 4600:
+                base_ugp_delay = self.persisted_delay_ms
+            else:
+                base_ugp_delay = 3800
+        else:
+            base_ugp_delay = 0
+
         raw_delta = (now - stream_start) - rel_s
-        if raw_delta < 0.0:
+
+        # For UGP continuous streams where raw_delta is outside [0.1, 8.0] (e.g. negative due to ongoing stream),
+        # ensure baseline fallback delay is active while measuring tick flip.
+        if is_ugp and (raw_delta < 0.1 or raw_delta > 8.0):
+            if not locked and self.info["auto_delay_ms"] == 0:
+                self.apply_measured_delay(base_ugp_delay, target, rel_str, state, locked=False)
+        elif not is_ugp and raw_delta < 0.0:
             if now - stream_start < 8.0:
                 return 0.08
-            fallback = self.persisted_delay_ms or (3800 if "/ugp/" in (info.get("uri") or "").lower() else 0)
+            fallback = self.persisted_delay_ms or 0
             if fallback > 0:
                 self.apply_measured_delay(fallback, target, rel_str, state, locked=True)
             return 5.0
-
-        if raw_delta > 8.0:
+        elif not is_ugp and raw_delta > 8.0:
             return 2.0
-
-        if locked:
-            current_delay_s = self.info["auto_delay_ms"] / 1000.0
-            error = raw_delta - current_delay_s
-            if -0.4 <= error <= 1.8:
-                return 6.0
 
         prev_rel = rel_s
         prev_at = now
@@ -572,7 +604,7 @@ class SpeakerSync:
                     current_start = self.stream_start_at
                 if current_start is not None:
                     exact_delay_s = (tick_at - current_start) - cur_rel
-                    if 0.05 <= exact_delay_s <= 8.0:
+                    if 0.05 <= exact_delay_s <= 8.0 and (not is_ugp or 2.5 <= exact_delay_s <= 5.0):
                         self.apply_measured_delay(
                             exact_delay_s * 1000,
                             target,
@@ -580,12 +612,33 @@ class SpeakerSync:
                             "PLAYING",
                             locked=cur_rel >= 1,
                         )
+                        self.last_measure_at = time.monotonic()
                         return 0.25 if cur_rel < 2 else 6.0
+                    elif is_ugp:
+                        # Continuous UGP radio stream: sub-second tick alignment against baseline
+                        elapsed_sub = (tick_at - current_start) % 1.0
+                        base_s = base_ugp_delay / 1000.0
+                        int_s = round(base_s - elapsed_sub)
+                        fine_delay_s = int_s + elapsed_sub
+                        fine_delay_ms = int(fine_delay_s * 1000)
+                        if 3000 <= fine_delay_ms <= 4800:
+                            self.apply_measured_delay(
+                                fine_delay_ms,
+                                target,
+                                probe.get("rel_str") or rel_str,
+                                "PLAYING",
+                                locked=True,
+                            )
+                            self.last_measure_at = time.monotonic()
+                            return 6.0
                 break
             prev_rel, prev_at = cur_rel, cur_at
 
         if 0.1 <= raw_delta <= 8.0 and not locked:
             self.apply_measured_delay(raw_delta * 1000, target, rel_str, state, locked=False)
+        elif is_ugp and not locked and self.info["auto_delay_ms"] == 0:
+            self.apply_measured_delay(base_ugp_delay, target, rel_str, state, locked=True)
+            self.last_measure_at = time.monotonic()
         return 0.5
 
     async def run(self, stopping_event):

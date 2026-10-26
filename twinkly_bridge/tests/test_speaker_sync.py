@@ -126,6 +126,67 @@ class SpeakerSyncTest(unittest.IsolatedAsyncioTestCase):
             server.server_close()
             thread.join()
 
+    async def test_continuous_ugp_stream_sync(self):
+        # Sonos is already mid-stream playing an ongoing UGP radio stream (rel_time: 1:19:41 = 4781s)
+        state = {"transport": "PLAYING", "start_mono": time.monotonic() - 4780.85}
+
+        class UgpHandler(BaseHTTPRequestHandler):
+            def log_message(self, *_args):
+                pass
+
+            def do_POST(self):
+                action = self.headers.get("SOAPAction", "")
+                if "GetZoneGroupState" in action:
+                    port = self.server.server_port
+                    xml = SAMPLE_ZGS_SOAP.replace("192.168.0.44:1400", f"127.0.0.1:{port}")
+                elif "GetTransportInfo" in action:
+                    xml = f"<s:Envelope><s:Body><CurrentTransportState>{state['transport']}</CurrentTransportState></s:Body></s:Envelope>"
+                else:
+                    elapsed = max(0, int(time.monotonic() - state["start_mono"]))
+                    m, s = divmod(elapsed, 60)
+                    h, m = divmod(m, 60)
+                    rel = f"{h}:{m:02d}:{s:02d}"
+                    xml = (
+                        "<s:Envelope><s:Body>"
+                        f"<RelTime>{rel}</RelTime>"
+                        "<TrackURI>x-rincon-mp3radio://http://127.0.0.1:8097/ugp/ugp_test.mp3</TrackURI>"
+                        "</s:Body></s:Envelope>"
+                    )
+                body = xml.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/xml")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), UgpHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                delays = []
+                sync = SpeakerSync(
+                    {"sync_speaker": f"127.0.0.1:{server.server_port}"},
+                    directory=Path(tmp),
+                    on_delay=delays.append,
+                )
+                # Twinkly Bridge starts up or track changes, stream_start_at is set to now
+                now = time.monotonic()
+                sync.on_stream_start(now)
+
+                # measure_once handles negative raw_delta by aligning sub-second tick to UGP baseline
+                await sync.measure_once()
+                st = sync.status()
+                self.assertTrue(st["locked"])
+                self.assertEqual(st["state"], "locked")
+                # Delay must be properly anchored within standard Sonos UGP buffer range (3.0s - 4.8s)
+                self.assertGreaterEqual(st["auto_delay_ms"], 3000)
+                self.assertLessEqual(st["auto_delay_ms"], 4800)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
+
 
 if __name__ == "__main__":
     unittest.main()

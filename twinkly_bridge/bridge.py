@@ -574,7 +574,7 @@ def handler_for(bridge, ingress=False):
                 if self.path == "/api/diagnostic":
                     if data.get("action") == "start":
                         with bridge.lock:
-                            metadata = dict(version="0.2.3", settings=dict(bridge.settings), fps=bridge.fps)
+                            metadata = dict(version="0.2.4", settings=dict(bridge.settings), fps=bridge.fps)
                         bridge.diagnostic.start(metadata)
                     elif data.get("action") == "stop": bridge.diagnostic.stop()
                     else: raise ValueError("Expected start or stop")

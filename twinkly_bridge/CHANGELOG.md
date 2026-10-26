@@ -1,3 +1,9 @@
+# 0.2.4
+
+- Fix continuous UGP / radio stream synchronization: lock onto sub-second Sonos tick flip even when `<RelTime>` is high (e.g. multi-track or mid-session continuous streaming) by aligning sub-second phases against the 3800 ms UGP baseline.
+- Prevent unverified delay corruption: only persist measured delay and write cache to disk when locked with a verified sub-second tick measurement; reject non-UGP/corrupted cache values during UGP streaming.
+- Add periodic drift re-measurement every 25 seconds or on track URI changes to eliminate sample clock drift over long sessions.
+
 # 0.2.3
 
 - Fix intermittent stutter / playback freeze: in `SpeakerSync`, prevent minor UPnP probe network timing jitter (<150 ms) from constantly re-shifting the queued frame timeline while locked, and account for the integer second progression of `<RelTime>` so normal playback does not falsely break lock.
